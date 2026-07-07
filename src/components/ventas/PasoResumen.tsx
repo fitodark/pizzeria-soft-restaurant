@@ -1,0 +1,182 @@
+"use client";
+
+import { Minus, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ExtrasNotasDialog } from "@/components/ventas/ExtrasNotasDialog";
+import {
+  formatoCents,
+  totalCarritoCents,
+  type ExtraCarrito,
+  type LineaCarrito,
+} from "@/components/ventas/carrito";
+import type { ExtraWizard } from "@/lib/consultas/ventas";
+import type { MetodoPago } from "@/generated/prisma/enums";
+
+type Props = {
+  lineas: LineaCarrito[];
+  mesa: string;
+  /** Solo DOMICILIO: datos de entrega y pago anticipado. */
+  domicilio: { cliente: string; direccion: string; pagaCon: string } | null;
+  metodoPago: MetodoPago;
+  extrasDisponibles: ExtraWizard[];
+  onMetodoPago: (metodo: MetodoPago) => void;
+  onCantidad: (uid: string, delta: number) => void;
+  onQuitar: (uid: string) => void;
+  onExtrasNotas: (uid: string, extras: ExtraCarrito[], notas: string) => void;
+};
+
+/** Paso 4: resumen, método de pago y confirmación. */
+export function PasoResumen({
+  lineas,
+  mesa,
+  domicilio,
+  metodoPago,
+  extrasDisponibles,
+  onMetodoPago,
+  onCantidad,
+  onQuitar,
+  onExtrasNotas,
+}: Props) {
+  if (lineas.length === 0) {
+    return (
+      <p className="py-12 text-center text-muted-foreground">
+        El pedido está vacío. Regresa a bebidas o comida para agregar productos.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <ul className="divide-y rounded-xl border bg-card">
+        {lineas.map((linea) => (
+          <li key={linea.uid} className="space-y-2 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium">{linea.titulo}</p>
+                {linea.subtitulo ? (
+                  <p className="text-sm text-muted-foreground">
+                    {linea.subtitulo}
+                  </p>
+                ) : null}
+                {linea.notas ? (
+                  <p className="text-sm text-secondary">Nota: {linea.notas}</p>
+                ) : null}
+                {linea.extras.map((extra) => (
+                  <p
+                    key={extra.productoId}
+                    className="text-sm text-muted-foreground"
+                  >
+                    + {extra.cantidad} × {extra.nombre} (
+                    {formatoCents(extra.precioCents * extra.cantidad)})
+                  </p>
+                ))}
+              </div>
+              <p className="shrink-0 font-semibold tabular-nums">
+                {formatoCents(linea.precioCents * linea.cantidad)}
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-9"
+                  onClick={() => onCantidad(linea.uid, -1)}
+                  disabled={linea.cantidad <= 1}
+                  aria-label="Disminuir cantidad"
+                >
+                  <Minus className="size-4" />
+                </Button>
+                <span className="w-6 text-center tabular-nums">
+                  {linea.cantidad}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-9"
+                  onClick={() => onCantidad(linea.uid, 1)}
+                  aria-label="Aumentar cantidad"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                {linea.permiteExtrasNotas ? (
+                  <ExtrasNotasDialog
+                    titulo={linea.titulo}
+                    extrasDisponibles={extrasDisponibles}
+                    extras={linea.extras}
+                    notas={linea.notas}
+                    onGuardar={(extras, notas) =>
+                      onExtrasNotas(linea.uid, extras, notas)
+                    }
+                  />
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 text-destructive"
+                  onClick={() => onQuitar(linea.uid)}
+                  aria-label="Quitar línea"
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="w-56 space-y-2">
+          <Label>Método de pago</Label>
+          <Select
+            value={metodoPago}
+            onValueChange={(v) => onMetodoPago(v as MetodoPago)}
+          >
+            <SelectTrigger className="h-11 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+              <SelectItem value="TRANSFERENCIA">
+                Transferencia (por validar)
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-right">
+          {domicilio ? (
+            <p className="text-sm text-muted-foreground">
+              {domicilio.cliente} · {domicilio.direccion}
+            </p>
+          ) : mesa ? (
+            <p className="text-sm text-muted-foreground">Mesa: {mesa}</p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">Total</p>
+          <p className="text-3xl font-semibold tabular-nums">
+            {formatoCents(totalCarritoCents(lineas))}
+          </p>
+          {domicilio?.pagaCon ? (
+            <p className="text-sm text-muted-foreground tabular-nums">
+              Paga con {formatoCents(Math.round(Number(domicilio.pagaCon) * 100))}{" "}
+              · Cambio a llevar:{" "}
+              {formatoCents(
+                Math.round(Number(domicilio.pagaCon) * 100) -
+                  totalCarritoCents(lineas)
+              )}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -18,11 +18,28 @@
 
 ## Fase 0 — Preparativos (½ día) · *desplegable por sí sola*
 
-1. **`git init` + commit inicial** (pendiente desde el empaquetado; indispensable antes de una cirugía de este tamaño).
-2. Instalar **PostgreSQL 17** en el servidor de sucursal como servicio de Windows; crear BD `barbosa` con esquema `schema_barbosa_v2`.
-3. Migrar datos: `pg_dump --schema=schema_barbosa_v2` desde Supabase (DIRECT_URL, puerto 5432) → `pg_restore` local. Verificar conteos por tabla.
-4. `.env`: `DATABASE_URL` y `DIRECT_URL` → `postgresql://…@localhost:5432/barbosa` (el pooler 6543 ya no aplica).
+1. ~~`git init` + commit inicial~~ ✔ **Hecho 2026-07-07**: https://github.com/fitodark/pizzeria-soft-restaurant.git
+2. Instalar **PostgreSQL 17** en el servidor de sucursal (ver nota de convivencia con 9.5 abajo); crear BD `barbosa` con esquema `schema_barbosa_v2`.
+3. Migrar datos: `pg_dump --schema=schema_barbosa_v2` desde Supabase (DIRECT_URL, puerto 5432) → `pg_restore` local. Verificar conteos por tabla. ⚠️ Usar los **binarios de la versión 17** (`C:\Program Files\PostgreSQL\17\bin\pg_dump.exe`): un `pg_dump` 9.5 no puede volcar un servidor más nuevo que él.
+4. `.env`: `DATABASE_URL` y `DIRECT_URL` → `postgresql://…@localhost:5433/barbosa` (el pooler 6543 ya no aplica).
 5. Smoke test: `pnpm dev` + suite `pnpm test:e2e` (4 flujos) contra el Postgres local.
+
+### Nota para infraestructura: convivencia con PostgreSQL 9.5 existente
+
+Los equipos ya tienen **PostgreSQL 9.5 con bases de otros sistemas que NO deben tocarse**. **No se requiere migrar ni actualizar esas bases**: PostgreSQL soporta múltiples versiones mayores instaladas en paralelo como instancias completamente independientes. Lineamientos:
+
+| Aspecto | Instancia 9.5 (existente) | Instancia 17 (nueva, POS) |
+|---|---|---|
+| Puerto | 5432 (no se toca) | **5433** (se define en el instalador) |
+| Servicio Windows | el actual (p. ej. `postgresql-x64-9.5`) | `postgresql-x64-17` (el instalador lo nombra distinto solo) |
+| Directorio de datos | el actual (no se toca) | propio (p. ej. `C:\Program Files\PostgreSQL\17\data`) |
+| Binarios | `...\9.5\bin` | `...\17\bin` |
+
+- El instalador oficial (EDB) maneja la instalación lado a lado de forma nativa; basta con **elegir el puerto 5433** cuando lo pregunte.
+- Verificar antes: `netstat -ano | findstr :5433` (puerto libre) y que el servicio 9.5 siga arriba después de instalar.
+- Riesgo principal a vigilar: scripts o accesos que usen `psql`/`pg_dump` "del PATH" — pueden tomar la versión equivocada; usar siempre rutas completas.
+- Precaución estándar: respaldo de las bases 9.5 antes de la ventana (no se tocan, pero es la red de seguridad).
+- Si infraestructura quisiera además **actualizar las bases 9.5 a 17** (opcional, es otro proyecto): 9.5 está fuera de soporte desde 2021; la ruta simple y segura es `pg_dump` (con binarios 17) → `pg_restore` a la instancia 17, base por base, validando cada sistema. `pg_upgrade` también soporta 9.5→17 pero exige más cuidado. **Nada de esto es requisito para el POS.**
 
 > Rollback trivial: regresar el `.env` a Supabase. En esta fase la nube sigue siendo la fuente de verdad; lo local es ensayo.
 > ⚠️ Hasta completar la Fase 1, el login sigue necesitando internet (Supabase Auth).

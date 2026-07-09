@@ -22,10 +22,12 @@ export type PromocionVigencia = {
   fechaFin: Date | null;
   /** 0=domingo … 6=sábado; vacío = todos los días */
   diasSemana: number[];
+  /** false: no se vende en fechas de la tabla dias_festivos */
+  aplicaFestivos: boolean;
 };
 
 /** Fecha operativa (reloj local de la sucursal) como "yyyy-MM-dd". */
-function fechaLocalTexto(fecha: Date): string {
+export function fechaLocalTexto(fecha: Date): string {
   const anio = fecha.getFullYear();
   const mes = String(fecha.getMonth() + 1).padStart(2, "0");
   const dia = String(fecha.getDate()).padStart(2, "0");
@@ -41,14 +43,17 @@ function fechaDbTexto(fecha: Date): string {
 }
 
 /**
- * Regla 4 de precios: PAQUETE se vende todos los días; PROMOCION y
- * DOS_POR_UNO solo si el día de la semana y la temporada aplican. El canal
- * se valida SIEMPRE. Debe evaluarse en servidor, no solo ocultarse en UI.
+ * Regla 4 de precios: canal, bandera activa, días de la semana y festivos se
+ * validan para TODO tipo (los paquetes son L-V y pueden excluir festivos);
+ * la temporada (fechas) solo aplica a PROMOCION y DOS_POR_UNO — PAQUETE no
+ * captura fechas. Debe evaluarse en servidor, no solo ocultarse en UI.
+ * `esFestivo` lo resuelve el caller consultando la tabla dias_festivos.
  */
 export function promocionVigente(
   promocion: PromocionVigencia,
   fecha: Date,
-  canal: CanalVenta
+  canal: CanalVenta,
+  esFestivo = false
 ): boolean {
   if (!promocion.activa) {
     return false;
@@ -60,8 +65,8 @@ export function promocionVigente(
   if (!canalPermitido) {
     return false;
   }
-  if (promocion.tipo === TipoPromocion.PAQUETE) {
-    return true;
+  if (esFestivo && !promocion.aplicaFestivos) {
+    return false;
   }
   if (
     promocion.diasSemana.length > 0 &&
@@ -82,9 +87,10 @@ export function promocionVigente(
 export function promocionesVigentes<T extends PromocionVigencia>(
   promociones: T[],
   fecha: Date,
-  canal: CanalVenta
+  canal: CanalVenta,
+  esFestivo = false
 ): T[] {
-  return promociones.filter((p) => promocionVigente(p, fecha, canal));
+  return promociones.filter((p) => promocionVigente(p, fecha, canal, esFestivo));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -118,16 +124,24 @@ export type ProductoCatalogo = {
   variantes: VarianteCatalogo[];
 };
 
+/** Fila de promocion_productos: componente fijo (productoId) o a elegir
+ *  (productoId null + categoriaPermitida; el tamaño se fija por nombre). */
+export type ComponentePromocion = {
+  id: string;
+  rol: RolPromoProducto;
+  productoId: string | null;
+  varianteId: string | null;
+  categoriaPermitida: string | null;
+  tamano: string | null;
+  maxSaboresOverride: number | null;
+  cantidad: number;
+};
+
 export type PromocionCatalogo = PromocionVigencia & {
   id: string;
   nombre: string;
   precioEspecial: Prisma.Decimal | null;
-  productos: {
-    rol: RolPromoProducto;
-    productoId: string | null;
-    varianteId: string | null;
-    cantidad: number;
-  }[];
+  productos: ComponentePromocion[];
 };
 
 export type ExtraEntrada = { productoId: string; cantidad: number };
@@ -163,6 +177,11 @@ export type LineaEntrada =
       tipoLinea: "PROMOCION";
       promocionId: string;
       cantidad: number;
+      /** Texto libre de "arma tu paquete" (sabor de la rebanada, "3 Hawaianas
+       *  y 2 Jumay"…): viaja en las notas de la línea de la promoción. */
+      notas?: string;
+      /** PAQUETE/PROMOCION: elección por componente libre (fila → producto). */
+      componentes?: { componenteId: string; productoId: string }[];
       /** Solo DOS_POR_UNO: pizza comprada y pizza de regalo. */
       compraProductoId?: string;
       compraVarianteId?: string;
@@ -411,6 +430,99 @@ function calcularLineaAlitas(
   };
 }
 
+/** Única variante activa del producto, o error pidiendo fijar el tamaño. */
+function varianteUnica(producto: ProductoCatalogo): VarianteCatalogo {
+  const activas = producto.variantes.filter((v) => v.activa);
+  if (activas.length !== 1) {
+    throw new Error(
+      `Configura el tamaño de "${producto.nombre}" en la promoción.`
+    );
+  }
+  return activas[0];
+}
+
+/**
+ * Componentes del paquete/promoción como líneas hijas a $0: los fijos salen
+ * de la configuración; los libres (productoId null) exigen la elección del
+ * cliente dentro de `categoriaPermitida` con el tamaño fijado por nombre.
+ * Con esto la comanda de cocina sabe exactamente qué preparar.
+ */
+function calcularComponentesPromo(
+  catalogo: Catalogo,
+  canal: CanalVenta,
+  promocion: PromocionCatalogo,
+  entrada: Extract<LineaEntrada, { tipoLinea: "PROMOCION" }>
+): LineaCalculada[] {
+  const componentes = promocion.productos.filter(
+    (c) => c.rol === RolPromoProducto.REQUERIDO
+  );
+  const elecciones = new Map(
+    (entrada.componentes ?? []).map((c) => [c.componenteId, c.productoId])
+  );
+  for (const componenteId of elecciones.keys()) {
+    const componente = componentes.find((c) => c.id === componenteId);
+    if (!componente || componente.productoId) {
+      throw new Error(
+        `La elección no corresponde a un componente de "${promocion.nombre}".`
+      );
+    }
+  }
+
+  return componentes.map((componente) => {
+    let producto: ProductoCatalogo;
+    let variante: VarianteCatalogo;
+
+    if (componente.productoId) {
+      // Componente fijo: configurado en la promoción
+      producto = obtenerProductoVendible(catalogo, componente.productoId, canal);
+      variante = componente.varianteId
+        ? obtenerVariante(producto, componente.varianteId)
+        : componente.tamano
+          ? varianteDeTamano(producto, componente.tamano)
+          : varianteUnica(producto);
+    } else {
+      // Componente libre: el cliente elige dentro de la categoría permitida
+      const eleccionId = elecciones.get(componente.id);
+      if (!eleccionId) {
+        throw new Error(
+          `Elige ${componente.categoriaPermitida ?? "el producto"} de "${promocion.nombre}".`
+        );
+      }
+      producto = obtenerProductoVendible(catalogo, eleccionId, canal);
+      if (
+        componente.categoriaPermitida &&
+        producto.categoria !== componente.categoriaPermitida
+      ) {
+        throw new Error(
+          `"${producto.nombre}" no entra en "${promocion.nombre}" (debe ser de ${componente.categoriaPermitida}).`
+        );
+      }
+      variante = componente.tamano
+        ? varianteDeTamano(producto, componente.tamano)
+        : varianteUnica(producto);
+    }
+
+    if (producto.tipoArticulo !== TipoArticulo.VENTA) {
+      throw new Error(
+        `"${producto.nombre}" es un extra: no puede ser componente de paquete.`
+      );
+    }
+
+    return {
+      tipoLinea: TipoLinea.PRODUCTO,
+      productoId: producto.id,
+      varianteId: variante.id,
+      promocionId: null,
+      cantidad: componente.cantidad * entrada.cantidad,
+      // El precio del componente lo absorbe el precio especial del conjunto
+      precioUnitario: new Prisma.Decimal(0),
+      notas: null,
+      mitades: [],
+      extras: [],
+    };
+  });
+}
+
 function validarProductoDePromo(
   regla: PromocionCatalogo["productos"][number] | undefined,
   producto: ProductoCatalogo,
@@ -433,6 +545,7 @@ function calcularLineaPromocion(
   catalogo: Catalogo,
   canal: CanalVenta,
   fecha: Date,
+  esFestivo: boolean,
   entrada: Extract<LineaEntrada, { tipoLinea: "PROMOCION" }>
 ): LineaCalculada[] {
   const promocion = catalogo.promociones.get(entrada.promocionId);
@@ -440,7 +553,7 @@ function calcularLineaPromocion(
     throw new Error("La promoción no existe.");
   }
   // Regla 4: validar vigencia y canal SIEMPRE en servidor
-  if (!promocionVigente(promocion, fecha, canal)) {
+  if (!promocionVigente(promocion, fecha, canal, esFestivo)) {
     throw new Error(`"${promocion.nombre}" no está vigente hoy en este canal.`);
   }
 
@@ -456,9 +569,10 @@ function calcularLineaPromocion(
         promocionId: promocion.id,
         cantidad: entrada.cantidad,
         precioUnitario: promocion.precioEspecial,
-        notas: null,
+        notas: entrada.notas || null,
         mitades: [],
-        extras: [],
+        // Los componentes cuelgan como líneas hijas a $0 (parent_detalle_id)
+        extras: calcularComponentesPromo(catalogo, canal, promocion, entrada),
       },
     ];
   }
@@ -524,7 +638,8 @@ export function calcularLineas(
   entradas: LineaEntrada[],
   catalogo: Catalogo,
   canal: CanalVenta,
-  fecha: Date
+  fecha: Date,
+  esFestivo = false
 ): LineaCalculada[] {
   if (entradas.length === 0) {
     throw new Error("La venta no tiene productos.");
@@ -538,7 +653,7 @@ export function calcularLineas(
       case "ALITAS_PERSONALIZADAS":
         return [calcularLineaAlitas(catalogo, canal, entrada)];
       case "PROMOCION":
-        return calcularLineaPromocion(catalogo, canal, fecha, entrada);
+        return calcularLineaPromocion(catalogo, canal, fecha, esFestivo, entrada);
     }
   });
 }

@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlitasPersonalizadasDialog } from "@/components/ventas/AlitasPersonalizadasDialog";
+import { ArmaPaqueteDialog } from "@/components/ventas/ArmaPaqueteDialog";
 import { PizzaPersonalizadaDialog } from "@/components/ventas/PizzaPersonalizadaDialog";
 import { Promo2x1Dialog } from "@/components/ventas/Promo2x1Dialog";
 import { TarjetaProducto } from "@/components/ventas/TarjetaProducto";
@@ -18,6 +19,9 @@ type Props = {
   especialidades: ProductoWizard[];
   saboresAlitas: ProductoWizard[];
   promociones: PromoWizard[];
+  /** Catálogo completo (comida y bebida) para los componentes de paquete. */
+  todosLosProductos: ProductoWizard[];
+  esDomicilio: boolean;
   onAgregarProducto: (producto: ProductoWizard, variante: VarianteWizard) => void;
   onAgregarPersonalizada: (datos: {
     tamano: string;
@@ -31,6 +35,12 @@ type Props = {
     precioCents: number;
   }) => void;
   onAgregarPromo: (promo: PromoWizard) => void;
+  onAgregarPaquete: (datos: {
+    promo: PromoWizard;
+    componentes: { componenteId: string; productoId: string }[];
+    notas: string;
+    resumen: string;
+  }) => void;
   onAgregar2x1: (datos: {
     promo: PromoWizard;
     compra: { productoId: string; varianteId: string };
@@ -47,10 +57,13 @@ export function PasoComida({
   especialidades,
   saboresAlitas,
   promociones,
+  todosLosProductos,
+  esDomicilio,
   onAgregarProducto,
   onAgregarPersonalizada,
   onAgregarAlitas,
   onAgregarPromo,
+  onAgregarPaquete,
   onAgregar2x1,
 }: Props) {
   const categorias = [...new Set(comidas.map((c) => c.categoria))];
@@ -80,6 +93,15 @@ export function PasoComida({
                 promo={promo}
                 especialidades={especialidades}
                 onAgregar={onAgregar2x1}
+              />
+            ) : promo.componentes.length > 0 ? (
+              // Con composición: abre "arma tu paquete" (elección + notas)
+              <ArmaPaqueteDialog
+                key={promo.id}
+                promo={promo}
+                productos={todosLosProductos}
+                esDomicilio={esDomicilio}
+                onAgregar={onAgregarPaquete}
               />
             ) : (
               <Button

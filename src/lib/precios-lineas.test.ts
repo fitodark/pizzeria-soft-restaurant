@@ -114,6 +114,7 @@ function promoCatalogo(
     fechaInicio: null,
     fechaFin: null,
     diasSemana: [],
+    aplicaFestivos: true,
     productos: [],
     ...extra,
   };
@@ -127,16 +128,24 @@ const dosPorUno = promoCatalogo({
   diasSemana: [2],
   productos: [
     {
+      id: "comp-compra",
       rol: RolPromoProducto.REQUERIDO,
       productoId: null,
       varianteId: null,
       cantidad: 1,
+      categoriaPermitida: null,
+      tamano: null,
+      maxSaboresOverride: null,
     },
     {
+      id: "comp-regalo",
       rol: RolPromoProducto.REGALO,
       productoId: null,
       varianteId: null,
       cantidad: 1,
+      categoriaPermitida: null,
+      tamano: null,
+      maxSaboresOverride: null,
     },
   ],
 });
@@ -163,7 +172,11 @@ const catalogo = {
 const EST = CanalVenta.ESTABLECIMIENTO;
 const DOM = CanalVenta.DOMICILIO;
 
-function calcular(entradas: LineaEntrada[], canal = EST, fecha = MARTES) {
+function calcular(
+  entradas: LineaEntrada[],
+  canal: CanalVenta = EST,
+  fecha = MARTES
+) {
   return calcularLineas(entradas, catalogo, canal, fecha);
 }
 
@@ -460,6 +473,25 @@ describe("calcularLineas — promociones y paquetes (regla 4)", () => {
       )
     ).toThrow(/no está vigente/);
   });
+
+  it("rechaza en día festivo la promo que no aplica en festivos", () => {
+    const catalogoFestivo = {
+      productos: catalogo.productos,
+      promociones: new Map([
+        ["promo", promoCatalogo({ aplicaFestivos: false })],
+      ]),
+    };
+    const entrada: LineaEntrada[] = [
+      { tipoLinea: "PROMOCION", promocionId: "promo", cantidad: 1 },
+    ];
+    expect(() =>
+      calcularLineas(entrada, catalogoFestivo, EST, MARTES, true)
+    ).toThrow(/no está vigente/);
+    // El mismo martes sin festivo sí procede
+    expect(
+      calcularLineas(entrada, catalogoFestivo, EST, MARTES, false)
+    ).toHaveLength(1);
+  });
 });
 
 describe("calcularLineas — 2x1 (regla 5)", () => {
@@ -499,6 +531,134 @@ describe("calcularLineas — 2x1 (regla 5)", () => {
     expect(() =>
       calcular([{ tipoLinea: "PROMOCION", promocionId: "2x1", cantidad: 1 }])
     ).toThrow(/requiere la pizza comprada y la de regalo/);
+  });
+});
+
+describe("calcularLineas — paquete con elección de componentes", () => {
+  // Paquete con un componente fijo (2 cocas) y uno libre (alitas de 10,
+  // 1 solo sabor a elegir)
+  const paqueteArma = promoCatalogo({
+    id: "paq-arma",
+    nombre: "Paquete Arma",
+    precioEspecial: D(299),
+    productos: [
+      {
+        id: "comp-coca",
+        rol: RolPromoProducto.REQUERIDO,
+        productoId: "coca",
+        varianteId: null,
+        categoriaPermitida: null,
+        tamano: null,
+        maxSaboresOverride: null,
+        cantidad: 2,
+      },
+      {
+        id: "comp-alitas",
+        rol: RolPromoProducto.REQUERIDO,
+        productoId: null,
+        varianteId: null,
+        categoriaPermitida: "alitas",
+        tamano: "10 pzas",
+        maxSaboresOverride: 1,
+        cantidad: 1,
+      },
+    ],
+  });
+  const catalogoPaquete = {
+    productos: catalogo.productos,
+    promociones: new Map([["paq-arma", paqueteArma]]),
+  };
+  const entradaBase: Extract<LineaEntrada, { tipoLinea: "PROMOCION" }> = {
+    tipoLinea: "PROMOCION",
+    promocionId: "paq-arma",
+    cantidad: 1,
+    notas: "las cocas bien frías",
+    componentes: [{ componenteId: "comp-alitas", productoId: "bbq" }],
+  };
+
+  it("cobra el precio especial y cuelga los componentes como hijas a $0", () => {
+    const lineas = calcularLineas([entradaBase], catalogoPaquete, EST, MARTES);
+    expect(lineas).toHaveLength(1);
+    const promo = lineas[0];
+    expect(promo.precioUnitario.toString()).toBe("299");
+    expect(promo.notas).toBe("las cocas bien frías");
+    expect(promo.extras).toHaveLength(2);
+    const [lineaCoca, lineaAlitas] = promo.extras;
+    expect(lineaCoca.productoId).toBe("coca");
+    expect(lineaCoca.varianteId).toBe("coca-un"); // variante única del fijo
+    expect(lineaCoca.cantidad).toBe(2);
+    expect(lineaCoca.precioUnitario.toString()).toBe("0");
+    expect(lineaAlitas.productoId).toBe("bbq");
+    expect(lineaAlitas.varianteId).toBe("bbq-10"); // tamaño fijado en el paquete
+    // El total de la venta es solo el precio del paquete
+    const planas = aplanarLineas(lineas).map((l) => ({ ...l, activo: true }));
+    expect(totalVenta(planas).toString()).toBe("299");
+  });
+
+  it("multiplica los componentes por la cantidad de paquetes", () => {
+    const lineas = calcularLineas(
+      [{ ...entradaBase, cantidad: 2 }],
+      catalogoPaquete,
+      EST,
+      MARTES
+    );
+    expect(lineas[0].extras[0].cantidad).toBe(4); // 2 cocas × 2 paquetes
+    expect(lineas[0].extras[1].cantidad).toBe(2);
+  });
+
+  it("exige la elección de los componentes libres", () => {
+    expect(() =>
+      calcularLineas(
+        [{ ...entradaBase, componentes: [] }],
+        catalogoPaquete,
+        EST,
+        MARTES
+      )
+    ).toThrow(/Elige alitas/);
+  });
+
+  it("rechaza una elección fuera de la categoría permitida", () => {
+    expect(() =>
+      calcularLineas(
+        [
+          {
+            ...entradaBase,
+            componentes: [
+              { componenteId: "comp-alitas", productoId: "hawaiana" },
+            ],
+          },
+        ],
+        catalogoPaquete,
+        EST,
+        MARTES
+      )
+    ).toThrow(/debe ser de alitas/);
+  });
+
+  it("rechaza elecciones que no apuntan a un componente libre", () => {
+    expect(() =>
+      calcularLineas(
+        [
+          {
+            ...entradaBase,
+            componentes: [
+              ...entradaBase.componentes!,
+              { componenteId: "comp-coca", productoId: "coca" },
+            ],
+          },
+        ],
+        catalogoPaquete,
+        EST,
+        MARTES
+      )
+    ).toThrow(/no corresponde a un componente/);
+  });
+
+  it("valida el canal también en los componentes fijos", () => {
+    // La coca es solo establecimiento: el paquete no procede a domicilio
+    expect(() =>
+      calcularLineas([entradaBase], catalogoPaquete, DOM, MARTES)
+    ).toThrow(/no está disponible en este canal/);
   });
 });
 

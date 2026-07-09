@@ -6,10 +6,16 @@ const REGEX_PRECIO = /^\d+(\.\d{1,2})?$/;
 
 export const esquemaPromoProducto = z.object({
   rol: z.enum(RolPromoProducto),
-  /** null = el usuario elige el producto al vender (solo DOS_POR_UNO). */
+  /** null = el usuario elige el producto al vender (2x1 o componente libre). */
   productoId: z.uuid().nullable(),
   /** null = cualquier tamaño. */
   varianteId: z.uuid().nullable(),
+  /** Componente libre de paquete: categoría de la que el cliente elige. */
+  categoriaPermitida: z.string().trim().nullable(),
+  /** Componente libre: tamaño fijado por nombre ("" = variante única). */
+  tamano: z.string().trim(),
+  /** Alitas en paquete: sobreescribe max_sabores ("" = sin override). */
+  maxSaboresOverride: z.string().trim().regex(/^[1-3]?$/, "De 1 a 3"),
   cantidad: z.string().regex(/^[1-9]\d*$/, "Cantidad inválida"),
 });
 
@@ -26,6 +32,8 @@ export const esquemaPromocion = z
     fechaInicio: z.string().trim(),
     fechaFin: z.string().trim(),
     diasSemana: z.array(z.number().int().min(0).max(6)),
+    /** false: no se vende en fechas del catálogo de días festivos. */
+    aplicaFestivos: z.boolean(),
     activa: z.boolean(),
     productos: z.array(esquemaPromoProducto).min(1, "Agrega al menos un producto"),
   })
@@ -75,11 +83,12 @@ export const esquemaPromocion = z
             message: "Los regalos solo existen en el 2x1",
           });
         }
-        if (!producto.productoId) {
+        // Componente fijo (producto) o libre (categoría a elegir al vender)
+        if (!producto.productoId && !producto.categoriaPermitida) {
           ctx.addIssue({
             code: "custom",
             path: ["productos", indice, "productoId"],
-            message: "Selecciona el producto",
+            message: "Selecciona un producto o una categoría a elegir",
           });
         }
       });

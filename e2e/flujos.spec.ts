@@ -11,6 +11,10 @@ import {
  * Flujos E2E: los 3 del blueprint (§13) + alitas combinadas. Corren en serie
  * contra la BD de desarrollo: el flujo 1 usa Sucursal Norte (abre Y cierra su
  * corte); los demás usan Centro y dejan sus ventas cobradas en el corte abierto.
+ *
+ * OJO: usan el menú real (scripts/cargar-menu.ts). Los paquetes son L-V y no
+ * aplican en días festivos: el flujo 1 falla si se corre en fin de semana o
+ * con la fecha actual registrada como festivo.
  */
 
 test("flujo 1: abrir corte → venta establecimiento → cobrar → cerrar corte", async ({
@@ -19,22 +23,36 @@ test("flujo 1: abrir corte → venta establecimiento → cobrar → cerrar corte
   await iniciarSesion(page, "Norte");
   await asegurarCorteAbierto(page);
 
-  // Venta de mostrador con una bebida
+  // Venta de mostrador: bebida + paquete L-V ($15 + $65)
   await page.goto("/ventas/nueva");
   await page.locator("#mesa").fill("3");
   await page.getByRole("button", { name: "Siguiente" }).click();
   await agregarProductoWizard(page, "Agua embotellada");
   await page.getByRole("button", { name: "Siguiente" }).click();
+
+  // "Arma tu paquete": elegir hot dog y refresco chico + nota para cocina
+  await page.getByRole("button", { name: /Paquete 2/ }).click();
+  const armaPaquete = page.getByRole("dialog");
+  await armaPaquete.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: "Hot Dog Clásico" }).click();
+  await armaPaquete.getByRole("combobox").nth(1).click();
+  await page.getByRole("option", { name: /Sprite/ }).click();
+  await armaPaquete.locator("#notas-paquete").fill("uno sin catsup");
+  await armaPaquete.getByRole("button", { name: "Agregar al pedido" }).click();
   await page.getByRole("button", { name: "Siguiente" }).click();
   await page.getByRole("button", { name: "Confirmar venta" }).click();
   await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
   await page.waitForURL("**/ventas");
 
-  // Cobrar con $100 → cambio $85
+  // Cobrar $80 con $100 → cambio $20
   await abrirVentaPendiente(page, "Mesa 3");
+  await expect(page.getByText("Paquete 2")).toBeVisible();
+  // La composición elegida viaja como líneas hijas a $0 (para cocina)
+  await expect(page.getByText("Hot Dog Clásico").first()).toBeVisible();
+  await expect(page.getByText(/Sprite/).first()).toBeVisible();
   await page.getByRole("button", { name: "Cobrar" }).click();
   await page.locator("#monto-pagado").fill("100");
-  await expect(page.getByText("Cambio: $85.00")).toBeVisible();
+  await expect(page.getByText("Cambio: $20.00")).toBeVisible();
   await page.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByText("Venta cobrada.")).toBeVisible();
   await expect(page.getByText("Cobrada").first()).toBeVisible();
@@ -53,7 +71,7 @@ test("flujo 1: abrir corte → venta establecimiento → cobrar → cerrar corte
   ).toBeVisible();
 });
 
-test("flujo 2: venta domicilio con pizza personalizada + extra + promo", async ({
+test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
   page,
 }) => {
   await iniciarSesion(page, "Centro");
@@ -67,17 +85,18 @@ test("flujo 2: venta domicilio con pizza personalizada + extra + promo", async (
   await expect(page.getByText("Juan Pérez")).toBeVisible();
   await page.locator("#paga-con").fill("700");
 
-  // Paso 3: promo PAQUETE (vigente a domicilio) + pizza personalizada
+  // Paso 3: pizza personalizada mezclando categorías (ambas $210 en grande);
+  // los paquetes reales son solo sucursal, así que a domicilio no aparecen
   await page.getByRole("button", { name: "Siguiente" }).click();
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await page.getByRole("button", { name: /Paquete Amigos/ }).click();
+  await expect(page.getByRole("button", { name: /Paquete 2/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Pizza personalizada" }).click();
   const dialogo = page.getByRole("dialog");
   await dialogo.getByRole("button", { name: /grande/i }).click();
   await dialogo.getByRole("combobox").first().click();
-  await page.getByRole("option").first().click();
+  await page.getByRole("option", { name: /Pizza Hawaiana/ }).click();
   await dialogo.getByRole("combobox").nth(1).click();
-  await page.getByRole("option", { name: /Cuatro Quesos/ }).first().click();
+  await page.getByRole("option", { name: /Pizza Carnes Frías/ }).first().click();
   await dialogo.getByRole("button", { name: "Agregar al pedido" }).click();
 
   // Paso 4: extra cobrable + nota en la personalizada
@@ -87,9 +106,9 @@ test("flujo 2: venta domicilio con pizza personalizada + extra + promo", async (
   await page.locator("#notas-linea").fill("sin cebolla");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
 
-  // Total 199 (paquete) + 215 (personalizada) + 25 (extra) = 439
-  await expect(page.getByText("$439.00").first()).toBeVisible();
-  await expect(page.getByText("Cambio a llevar: $261.00")).toBeVisible();
+  // Total 210 (personalizada grande) + 25 (extra) = 235
+  await expect(page.getByText("$235.00").first()).toBeVisible();
+  await expect(page.getByText("Cambio a llevar: $465.00")).toBeVisible();
   await page.getByRole("button", { name: "Confirmar venta" }).click();
   await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
   await page.waitForURL("**/ventas");
@@ -98,15 +117,17 @@ test("flujo 2: venta domicilio con pizza personalizada + extra + promo", async (
   await abrirVentaPendiente(page, "Juan Pérez");
   await expect(page.getByText(/Juan Pérez · 3311122233/)).toBeVisible();
   await expect(page.getByText("Paga con $700.00")).toBeVisible();
-  await expect(page.getByText("Paquete Amigos")).toBeVisible();
   await expect(page.getByText(/Pizza personalizada \(grande\)/)).toBeVisible();
+  await expect(
+    page.getByText("Mitades: Pizza Hawaiana / Pizza Carnes Frías")
+  ).toBeVisible();
   await expect(page.getByText(/\+ Queso extra/)).toBeVisible();
   await expect(page.getByText("Nota: sin cebolla")).toBeVisible();
 
-  // Cobrar con el pago anticipado → cambio $261
+  // Cobrar con el pago anticipado → cambio $465
   await page.getByRole("button", { name: "Cobrar" }).click();
   await page.locator("#monto-pagado").fill("700");
-  await expect(page.getByText("Cambio: $261.00")).toBeVisible();
+  await expect(page.getByText("Cambio: $465.00")).toBeVisible();
   await page.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByText("Venta cobrada.")).toBeVisible();
 });
@@ -128,7 +149,8 @@ test("flujo 4: alitas combinadas de 3 sabores + aderezo extra", async ({
   await expect(dialogo.getByRole("button", { name: /7 pzas/ })).toHaveCount(0);
   await dialogo.getByRole("button", { name: /20 pzas/ }).click();
   await dialogo.getByRole("combobox").first().click();
-  await page.getByRole("option", { name: "Alitas BBQ" }).click();
+  // exact: el menú real también tiene "Alitas BBQ Habanero"
+  await page.getByRole("option", { name: "Alitas BBQ", exact: true }).click();
   await dialogo.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: "Alitas Búfalo" }).click();
   await dialogo.getByRole("button", { name: "Agregar tercer sabor" }).click();
@@ -178,7 +200,7 @@ test("flujo 3: inactivar línea con PIN y verificar auditoría como admin", asyn
   await page.getByRole("button", { name: "Siguiente" }).click();
   await agregarProductoWizard(page, "Agua embotellada");
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await agregarProductoWizard(page, "Pizza Cuatro Quesos", /grande/i);
+  await agregarProductoWizard(page, "Pizza Boloñesa", /grande/i);
   await page.getByRole("button", { name: "Siguiente" }).click();
   await page.getByRole("button", { name: "Confirmar venta" }).click();
   await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
@@ -187,7 +209,7 @@ test("flujo 3: inactivar línea con PIN y verificar auditoría como admin", asyn
   // PIN incorrecto rechazado; PIN correcto inactiva con auditoría
   await abrirVentaPendiente(page, "Mesa 9");
   await page
-    .getByRole("button", { name: /Inactivar Pizza Cuatro Quesos/ })
+    .getByRole("button", { name: /Inactivar Pizza Boloñesa/ })
     .click();
   await page.locator("#pin-linea").fill("0000");
   await page.getByRole("button", { name: "Inactivar línea" }).click();

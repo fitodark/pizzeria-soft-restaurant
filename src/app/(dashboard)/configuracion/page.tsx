@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
+import { listaDiasFestivos } from "@/lib/consultas/festivos";
 import { FormularioConfiguracion } from "@/components/forms/FormularioConfiguracion";
+import { DiasFestivos } from "@/components/forms/DiasFestivos";
 import type { DatosConfiguracion, ModoImpresora } from "@/lib/esquemas/configuracion";
 
 export default async function PaginaConfiguracion() {
@@ -10,8 +12,9 @@ export default async function PaginaConfiguracion() {
   if (!tienePermiso(sesion.rol, "configuracion.gestionar")) {
     redirect("/");
   }
+  const puedeFestivos = tienePermiso(sesion.rol, "festivos.gestionar");
 
-  const [sucursal, config] = await Promise.all([
+  const [sucursal, config, festivos] = await Promise.all([
     db.sucursal.findUnique({
       where: { id: sesion.sucursalId },
       select: { nombre: true },
@@ -19,6 +22,7 @@ export default async function PaginaConfiguracion() {
     db.configuracionSucursal.findUnique({
       where: { sucursalId: sesion.sucursalId },
     }),
+    puedeFestivos ? listaDiasFestivos() : Promise.resolve([]),
   ]);
 
   const valoresIniciales: DatosConfiguracion | null = config
@@ -44,6 +48,7 @@ export default async function PaginaConfiguracion() {
         </p>
       </div>
       <FormularioConfiguracion valoresIniciales={valoresIniciales} />
+      {puedeFestivos ? <DiasFestivos festivos={festivos} /> : null}
     </div>
   );
 }

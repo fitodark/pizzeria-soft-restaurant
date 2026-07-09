@@ -6,6 +6,7 @@ import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
 import { formatoMoneda } from "@/lib/utils";
 import { promocionVigente } from "@/lib/precios";
+import { esDiaFestivo } from "@/lib/consultas/festivos";
 import { CanalVenta } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { TablaPromociones, type FilaPromocion } from "./TablaPromociones";
@@ -19,14 +20,11 @@ const ETIQUETA_TIPO: Record<string, string> = {
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 
 function resumenVigencia(promo: {
-  tipo: string;
   diasSemana: number[];
   fechaInicio: Date | null;
   fechaFin: Date | null;
+  aplicaFestivos: boolean;
 }): string {
-  if (promo.tipo === "PAQUETE") {
-    return "Todos los días";
-  }
   const partes: string[] = [];
   partes.push(
     promo.diasSemana.length === 0
@@ -38,6 +36,9 @@ function resumenVigencia(promo: {
     const fin = promo.fechaFin?.toISOString().slice(0, 10) ?? "…";
     partes.push(`${inicio} a ${fin}`);
   }
+  if (!promo.aplicaFestivos) {
+    partes.push("excepto festivos");
+  }
   return partes.join(" · ");
 }
 
@@ -48,11 +49,14 @@ export default async function PaginaPromociones() {
   }
   const puedeGestionar = tienePermiso(sesion.rol, "promociones.gestionar");
 
-  const promociones = await db.promocion.findMany({
-    orderBy: [{ activa: "desc" }, { nombre: "asc" }],
-  });
-
   const hoy = new Date();
+  const [promociones, hoyEsFestivo] = await Promise.all([
+    db.promocion.findMany({
+      orderBy: [{ activa: "desc" }, { nombre: "asc" }],
+    }),
+    esDiaFestivo(hoy),
+  ]);
+
   const filas: FilaPromocion[] = promociones.map((p) => ({
     id: p.id,
     nombre: p.nombre,
@@ -69,8 +73,8 @@ export default async function PaginaPromociones() {
         .filter(Boolean)
         .join(" · ") || "—",
     vigenteHoy:
-      promocionVigente(p, hoy, CanalVenta.ESTABLECIMIENTO) ||
-      promocionVigente(p, hoy, CanalVenta.DOMICILIO),
+      promocionVigente(p, hoy, CanalVenta.ESTABLECIMIENTO, hoyEsFestivo) ||
+      promocionVigente(p, hoy, CanalVenta.DOMICILIO, hoyEsFestivo),
     activa: p.activa,
     puedeGestionar,
   }));

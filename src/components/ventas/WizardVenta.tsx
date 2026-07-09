@@ -158,6 +158,29 @@ export function WizardVenta({ catalogo }: Props) {
     toast.success(`${promo.nombre} agregada.`);
   };
 
+  const agregarPaquete = (datos: {
+    promo: PromoWizard;
+    componentes: { componenteId: string; productoId: string }[];
+    notas: string;
+    resumen: string;
+  }) => {
+    agregarLinea({
+      tipoLinea: "PROMOCION",
+      titulo: datos.promo.nombre,
+      subtitulo: datos.resumen,
+      cantidad: 1,
+      precioCents: datos.promo.precioEspecial
+        ? aCents(datos.promo.precioEspecial)
+        : 0,
+      permiteExtrasNotas: false,
+      notas: datos.notas,
+      extras: [],
+      promocionId: datos.promo.id,
+      componentes: datos.componentes,
+    });
+    toast.success(`${datos.promo.nombre} agregado.`);
+  };
+
   const agregar2x1 = (datos: {
     promo: PromoWizard;
     compra: { productoId: string; varianteId: string };
@@ -287,10 +310,13 @@ export function WizardVenta({ catalogo }: Props) {
           especialidades={especialidades}
           saboresAlitas={saboresAlitas}
           promociones={promociones}
+          todosLosProductos={catalogo.productos}
+          esDomicilio={esDomicilio}
           onAgregarProducto={agregarProducto}
           onAgregarPersonalizada={agregarPersonalizada}
           onAgregarAlitas={agregarAlitas}
           onAgregarPromo={agregarPromo}
+          onAgregarPaquete={agregarPaquete}
           onAgregar2x1={agregar2x1}
         />
       ) : null}

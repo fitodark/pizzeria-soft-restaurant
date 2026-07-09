@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { esDiaFestivo } from "@/lib/consultas/festivos";
 import { promocionVigente } from "@/lib/precios";
 import {
   CanalVenta,
@@ -40,6 +41,18 @@ export type ReglaPromoWizard = {
   cantidad: number;
 };
 
+/** Componente de PAQUETE/PROMOCION para "arma tu paquete". */
+export type ComponenteWizard = {
+  id: string;
+  /** Fijo (viene configurado) o null = el cliente elige. */
+  productoId: string | null;
+  varianteId: string | null;
+  categoriaPermitida: string | null;
+  tamano: string | null;
+  maxSaboresOverride: number | null;
+  cantidad: number;
+};
+
 export type PromoWizard = {
   id: string;
   nombre: string;
@@ -50,6 +63,8 @@ export type PromoWizard = {
   vigenteDomicilio: boolean;
   requerido: ReglaPromoWizard | null;
   regalo: ReglaPromoWizard | null;
+  /** Solo PAQUETE/PROMOCION (el 2x1 usa requerido/regalo). */
+  componentes: ComponenteWizard[];
 };
 
 export type CatalogoWizard = {
@@ -59,7 +74,7 @@ export type CatalogoWizard = {
 };
 
 export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
-  const [productos, promociones] = await Promise.all([
+  const [productos, promociones, esFestivo] = await Promise.all([
     db.producto.findMany({
       where: { activo: true },
       include: {
@@ -72,6 +87,7 @@ export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
       include: { productos: true },
       orderBy: { nombre: "asc" },
     }),
+    esDiaFestivo(fecha),
   ]);
 
   const venta = productos.filter(
@@ -113,11 +129,12 @@ export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
         descripcion: p.descripcion,
         tipo: p.tipo,
         precioEspecial: p.precioEspecial?.toString() ?? null,
-        vigenteEstablecimiento: promocionVigente(p, fecha, CanalVenta.ESTABLECIMIENTO),
-        vigenteDomicilio: promocionVigente(p, fecha, CanalVenta.DOMICILIO),
+        vigenteEstablecimiento: promocionVigente(p, fecha, CanalVenta.ESTABLECIMIENTO, esFestivo),
+        vigenteDomicilio: promocionVigente(p, fecha, CanalVenta.DOMICILIO, esFestivo),
         requerido:
           p.productos.find((pp) => pp.rol === "REQUERIDO") ?? null,
         regalo: p.productos.find((pp) => pp.rol === "REGALO") ?? null,
+        componentes: p.productos.filter((pp) => pp.rol === "REQUERIDO"),
       }))
       .filter((p) => p.vigenteEstablecimiento || p.vigenteDomicilio)
       .map((p) => ({
@@ -136,6 +153,18 @@ export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
               cantidad: p.regalo.cantidad,
             }
           : null,
+        componentes:
+          p.tipo === TipoPromocion.DOS_POR_UNO
+            ? []
+            : p.componentes.map((c) => ({
+                id: c.id,
+                productoId: c.productoId,
+                varianteId: c.varianteId,
+                categoriaPermitida: c.categoriaPermitida,
+                tamano: c.tamano,
+                maxSaboresOverride: c.maxSaboresOverride,
+                cantidad: c.cantidad,
+              })),
       })),
   };
 }

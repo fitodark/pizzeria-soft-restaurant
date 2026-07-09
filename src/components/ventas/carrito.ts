@@ -34,6 +34,8 @@ export type LineaCarrito = {
   saboresProductoIds?: string[];
   // PROMOCION
   promocionId?: string;
+  /** Paquete/promo: producto elegido por componente libre. */
+  componentes?: { componenteId: string; productoId: string }[];
   compraProductoId?: string;
   compraVarianteId?: string;
   regaloProductoId?: string;
@@ -100,6 +102,11 @@ export function aLineasEntrada(lineas: LineaCarrito[]): LineaEntrada[] {
       tipoLinea: "PROMOCION",
       promocionId: linea.promocionId!,
       cantidad: linea.cantidad,
+      notas: linea.notas || undefined,
+      componentes:
+        linea.componentes && linea.componentes.length > 0
+          ? linea.componentes
+          : undefined,
       compraProductoId: linea.compraProductoId,
       compraVarianteId: linea.compraVarianteId,
       regaloProductoId: linea.regaloProductoId,

@@ -36,6 +36,7 @@ export const ACCIONES = [
   "usuarios.gestionar",
   "reportes.ver",
   "configuracion.gestionar",
+  "festivos.gestionar", // catálogo global de días festivos — solo ADMINISTRADOR
   // Otros
   "impresion.reimprimir",
   "auditoria.verInactivos", // solo ADMINISTRADOR

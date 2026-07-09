@@ -39,10 +39,13 @@ import { Textarea } from "@/components/ui/textarea";
 
 /** Sentinela para "sin selección concreta" (Radix Select no admite value=""). */
 const LIBRE = "__libre__";
+/** Prefijo para componentes libres: "cualquier producto de la categoría". */
+const PREFIJO_CATEGORIA = "cat:";
 
 export type ProductoParaPromo = {
   id: string;
   nombre: string;
+  categoria: string;
   esEspecialidad: boolean;
   variantes: { id: string; tamano: string }[];
 };
@@ -63,6 +66,16 @@ const DIAS = [
   { valor: 6, etiqueta: "Sáb" },
 ];
 
+const FILA_VACIA = {
+  rol: RolPromoProducto.REQUERIDO,
+  productoId: null,
+  varianteId: null,
+  categoriaPermitida: null,
+  tamano: "",
+  maxSaboresOverride: "",
+  cantidad: "1",
+};
+
 export function FormularioPromocion({ productos, promocion }: Props) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
@@ -80,10 +93,9 @@ export function FormularioPromocion({ productos, promocion }: Props) {
       fechaInicio: "",
       fechaFin: "",
       diasSemana: [],
+      aplicaFestivos: true,
       activa: true,
-      productos: [
-        { rol: RolPromoProducto.REQUERIDO, productoId: null, varianteId: null, cantidad: "1" },
-      ],
+      productos: [FILA_VACIA],
     },
   });
 
@@ -97,8 +109,8 @@ export function FormularioPromocion({ productos, promocion }: Props) {
     if (nuevo === TipoPromocion.DOS_POR_UNO) {
       form.setValue("precioEspecial", "");
       form.setValue("productos", [
-        { rol: RolPromoProducto.REQUERIDO, productoId: null, varianteId: null, cantidad: "1" },
-        { rol: RolPromoProducto.REGALO, productoId: null, varianteId: null, cantidad: "1" },
+        { ...FILA_VACIA },
+        { ...FILA_VACIA, rol: RolPromoProducto.REGALO },
       ]);
     } else {
       form.setValue(
@@ -110,6 +122,17 @@ export function FormularioPromocion({ productos, promocion }: Props) {
       );
     }
   };
+
+  // Categorías para componentes libres ("cualquier <categoría> a elegir")
+  const categorias = [...new Set(productos.map((p) => p.categoria))].sort();
+  const tamanosDe = (categoria: string) =>
+    [
+      ...new Set(
+        productos
+          .filter((p) => p.categoria === categoria)
+          .flatMap((p) => p.variantes.map((v) => v.tamano))
+      ),
+    ].sort();
 
   const enviar = (datos: DatosPromocion) => {
     startTransition(async () => {
@@ -169,7 +192,7 @@ export function FormularioPromocion({ productos, promocion }: Props) {
                       Promoción (precio especial por temporada/días)
                     </SelectItem>
                     <SelectItem value={TipoPromocion.PAQUETE}>
-                      Paquete (precio fijo, todos los días)
+                      Paquete (precio fijo, sin temporada)
                     </SelectItem>
                     <SelectItem value={TipoPromocion.DOS_POR_UNO}>
                       2x1 (se cobra la pizza comprada)
@@ -217,8 +240,8 @@ export function FormularioPromocion({ productos, promocion }: Props) {
           />
         ) : null}
 
-        {!esPaquete ? (
-          <div className="space-y-4">
+        <div className="space-y-4">
+          {!esPaquete ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -247,38 +270,56 @@ export function FormularioPromocion({ productos, promocion }: Props) {
                 )}
               />
             </div>
-            <FormField
-              control={form.control}
-              name="diasSemana"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Días de la semana (vacío = todos)</FormLabel>
-                  <div className="flex flex-wrap gap-3 rounded-lg border p-3">
-                    {DIAS.map((dia) => (
-                      <label
-                        key={dia.valor}
-                        className="flex items-center gap-1.5 text-sm"
-                      >
-                        <Checkbox
-                          checked={field.value.includes(dia.valor)}
-                          onCheckedChange={(marcado) =>
-                            field.onChange(
-                              marcado
-                                ? [...field.value, dia.valor].sort()
-                                : field.value.filter((d) => d !== dia.valor)
-                            )
-                          }
-                        />
-                        {dia.etiqueta}
-                      </label>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        ) : null}
+          ) : null}
+          <FormField
+            control={form.control}
+            name="diasSemana"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Días de la semana (vacío = todos)</FormLabel>
+                <div className="flex flex-wrap gap-3 rounded-lg border p-3">
+                  {DIAS.map((dia) => (
+                    <label
+                      key={dia.valor}
+                      className="flex items-center gap-1.5 text-sm"
+                    >
+                      <Checkbox
+                        checked={field.value.includes(dia.valor)}
+                        onCheckedChange={(marcado) =>
+                          field.onChange(
+                            marcado
+                              ? [...field.value, dia.valor].sort()
+                              : field.value.filter((d) => d !== dia.valor)
+                          )
+                        }
+                      />
+                      {dia.etiqueta}
+                    </label>
+                  ))}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="aplicaFestivos"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                <div>
+                  <FormLabel>Aplica en días festivos</FormLabel>
+                  <FormDescription>
+                    Apagado: no se vende en las fechas del catálogo de días
+                    festivos (Configuración).
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
 
         <div className="space-y-3">
           <FormLabel>
@@ -286,6 +327,9 @@ export function FormularioPromocion({ productos, promocion }: Props) {
           </FormLabel>
           {lineas.fields.map((campo, indice) => {
             const productoId = form.watch(`productos.${indice}.productoId`);
+            const categoriaElegida = form.watch(
+              `productos.${indice}.categoriaPermitida`
+            );
             const productoElegido = productos.find((p) => p.id === productoId);
             const rol = form.getValues(`productos.${indice}.rol`);
             return (
@@ -302,10 +346,23 @@ export function FormularioPromocion({ productos, promocion }: Props) {
                     <FormItem className="min-w-56 flex-1">
                       <Select
                         onValueChange={(v) => {
-                          field.onChange(v === LIBRE ? null : v);
+                          const esCategoria = v.startsWith(PREFIJO_CATEGORIA);
+                          field.onChange(
+                            v === LIBRE || esCategoria ? null : v
+                          );
+                          form.setValue(
+                            `productos.${indice}.categoriaPermitida`,
+                            esCategoria ? v.slice(PREFIJO_CATEGORIA.length) : null
+                          );
                           form.setValue(`productos.${indice}.varianteId`, null);
+                          form.setValue(`productos.${indice}.tamano`, "");
                         }}
-                        value={field.value ?? LIBRE}
+                        value={
+                          field.value ??
+                          (categoriaElegida
+                            ? `${PREFIJO_CATEGORIA}${categoriaElegida}`
+                            : LIBRE)
+                        }
                       >
                         <FormControl>
                           <SelectTrigger className="h-11 w-full">
@@ -319,9 +376,20 @@ export function FormularioPromocion({ productos, promocion }: Props) {
                             </SelectItem>
                           ) : (
                             <SelectItem value={LIBRE}>
-                              — Selecciona producto —
+                              — Selecciona producto o categoría —
                             </SelectItem>
                           )}
+                          {!esDosPorUno
+                            ? categorias.map((categoria) => (
+                                <SelectItem
+                                  key={categoria}
+                                  value={`${PREFIJO_CATEGORIA}${categoria}`}
+                                  className="capitalize"
+                                >
+                                  Cualquier: {categoria} (se elige al vender)
+                                </SelectItem>
+                              ))
+                            : null}
                           {opcionesProducto(esDosPorUno)}
                         </SelectContent>
                       </Select>
@@ -329,34 +397,91 @@ export function FormularioPromocion({ productos, promocion }: Props) {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name={`productos.${indice}.varianteId`}
-                  render={({ field }) => (
-                    <FormItem className="w-44">
-                      <Select
-                        onValueChange={(v) => field.onChange(v === LIBRE ? null : v)}
-                        value={field.value ?? LIBRE}
-                        disabled={!productoElegido}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-11 w-full">
-                            <SelectValue placeholder="Tamaño" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={LIBRE}>Cualquier tamaño</SelectItem>
-                          {productoElegido?.variantes.map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
-                              {v.tamano}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {categoriaElegida && !productoElegido ? (
+                  // Componente libre: tamaño por nombre + override de sabores
+                  <>
+                    <FormField
+                      control={form.control}
+                      name={`productos.${indice}.tamano`}
+                      render={({ field }) => (
+                        <FormItem className="w-44">
+                          <Select
+                            onValueChange={(v) =>
+                              field.onChange(v === LIBRE ? "" : v)
+                            }
+                            value={field.value || LIBRE}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-11 w-full">
+                                <SelectValue placeholder="Tamaño" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value={LIBRE}>
+                                Tamaño único
+                              </SelectItem>
+                              {tamanosDe(categoriaElegida).map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {categoriaElegida === "alitas" ? (
+                      <FormField
+                        control={form.control}
+                        name={`productos.${indice}.maxSaboresOverride`}
+                        render={({ field }) => (
+                          <FormItem className="w-24">
+                            <FormControl>
+                              <Input
+                                className="h-11 text-right tabular-nums"
+                                inputMode="numeric"
+                                placeholder="Sabores"
+                                aria-label="Máximo de sabores"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name={`productos.${indice}.varianteId`}
+                    render={({ field }) => (
+                      <FormItem className="w-44">
+                        <Select
+                          onValueChange={(v) => field.onChange(v === LIBRE ? null : v)}
+                          value={field.value ?? LIBRE}
+                          disabled={!productoElegido}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="h-11 w-full">
+                              <SelectValue placeholder="Tamaño" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={LIBRE}>Cualquier tamaño</SelectItem>
+                            {productoElegido?.variantes.map((v) => (
+                              <SelectItem key={v.id} value={v.id}>
+                                {v.tamano}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 {!esDosPorUno ? (
                   <>
                     <FormField
@@ -395,14 +520,7 @@ export function FormularioPromocion({ productos, promocion }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                lineas.append({
-                  rol: RolPromoProducto.REQUERIDO,
-                  productoId: null,
-                  varianteId: null,
-                  cantidad: "1",
-                })
-              }
+              onClick={() => lineas.append({ ...FILA_VACIA })}
             >
               <Plus className="size-4" />
               Agregar producto

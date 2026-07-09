@@ -43,6 +43,13 @@ const esquemaLineaPromocion = z.object({
   tipoLinea: z.literal("PROMOCION"),
   promocionId: z.uuid(),
   cantidad,
+  /** Texto libre de "arma tu paquete" (va a las notas de la línea). */
+  notas: z.string().trim().max(200).optional(),
+  /** PAQUETE/PROMOCION: producto elegido por componente libre. */
+  componentes: z
+    .array(z.object({ componenteId: z.uuid(), productoId: z.uuid() }))
+    .max(10)
+    .optional(),
   compraProductoId: z.uuid().optional(),
   compraVarianteId: z.uuid().optional(),
   regaloProductoId: z.uuid().optional(),

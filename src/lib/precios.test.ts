@@ -12,6 +12,7 @@ function promo(extra: Partial<PromocionVigencia> = {}): PromocionVigencia {
     fechaInicio: null,
     fechaFin: null,
     diasSemana: [],
+    aplicaFestivos: true,
     ...extra,
   };
 }
@@ -40,16 +41,16 @@ describe("promocionVigente — canal", () => {
 });
 
 describe("promocionVigente — PAQUETE", () => {
-  it("se vende todos los días, ignorando fechas y días de semana", () => {
-    const p = promo({
-      tipo: TipoPromocion.PAQUETE,
-      // Aunque tuviera restricciones capturadas, PAQUETE las ignora
-      diasSemana: [3],
-      fechaInicio: new Date("2020-01-01"),
-      fechaFin: new Date("2020-01-31"),
-    });
+  it("sin días capturados se vende todos los días", () => {
+    const p = promo({ tipo: TipoPromocion.PAQUETE });
     expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO)).toBe(true);
     expect(promocionVigente(p, DOMINGO, CanalVenta.ESTABLECIMIENTO)).toBe(true);
+  });
+
+  it("respeta los días de la semana (los paquetes del menú son L-V)", () => {
+    const p = promo({ tipo: TipoPromocion.PAQUETE, diasSemana: [1, 2, 3, 4, 5] });
+    expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO)).toBe(true);
+    expect(promocionVigente(p, DOMINGO, CanalVenta.ESTABLECIMIENTO)).toBe(false);
   });
 
   it("aún así respeta canal y bandera activa", () => {
@@ -67,6 +68,28 @@ describe("promocionVigente — PAQUETE", () => {
         CanalVenta.DOMICILIO
       )
     ).toBe(false);
+  });
+});
+
+describe("promocionVigente — días festivos", () => {
+  it("con aplicaFestivos=false no se vende en festivo", () => {
+    const p = promo({ aplicaFestivos: false });
+    expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO, true)).toBe(false);
+    expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO, false)).toBe(true);
+  });
+
+  it("con aplicaFestivos=true el festivo no la afecta", () => {
+    expect(promocionVigente(promo(), MARTES, CanalVenta.ESTABLECIMIENTO, true)).toBe(true);
+  });
+
+  it("sin esFestivo explícito asume día normal", () => {
+    const p = promo({ aplicaFestivos: false });
+    expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO)).toBe(true);
+  });
+
+  it("excluye también a los PAQUETE en festivo", () => {
+    const p = promo({ tipo: TipoPromocion.PAQUETE, aplicaFestivos: false });
+    expect(promocionVigente(p, MARTES, CanalVenta.ESTABLECIMIENTO, true)).toBe(false);
   });
 });
 
@@ -174,5 +197,18 @@ describe("promocionesVigentes", () => {
       CanalVenta.DOMICILIO
     );
     expect(domingoDomicilio).toEqual([paquete, soloDomicilio]);
+  });
+
+  it("en festivo filtra las que no aplican en festivos", () => {
+    const normal = promo();
+    const sinFestivos = promo({ aplicaFestivos: false });
+
+    const enFestivo = promocionesVigentes(
+      [normal, sinFestivos],
+      MARTES,
+      CanalVenta.ESTABLECIMIENTO,
+      true
+    );
+    expect(enFestivo).toEqual([normal]);
   });
 });

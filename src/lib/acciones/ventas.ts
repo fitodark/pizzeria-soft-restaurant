@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getSesion } from "@/lib/auth";
 import { verificarPermiso } from "@/lib/permisos";
 import { corteAbierto } from "@/lib/consultas/cortes";
+import { esDiaFestivo } from "@/lib/consultas/festivos";
 import { siguienteFolio } from "@/lib/folios";
 import {
   aplanarLineas,
@@ -40,7 +41,8 @@ export type ResultadoVenta =
   | { ok: true; ventaId: string; folio: number; avisoImpresion?: string }
   | { ok: false; error: string };
 
-/** IDs de productos referenciados por las líneas (incluye mitades y extras). */
+/** IDs de productos referenciados por las líneas (incluye mitades, extras y
+ *  elecciones de componentes de paquete). */
 function idsProductosDe(lineas: LineaEntrada[]): string[] {
   const ids = new Set<string>();
   for (const linea of lineas) {
@@ -56,6 +58,9 @@ function idsProductosDe(lineas: LineaEntrada[]): string[] {
     } else {
       if (linea.compraProductoId) ids.add(linea.compraProductoId);
       if (linea.regaloProductoId) ids.add(linea.regaloProductoId);
+      for (const componente of linea.componentes ?? []) {
+        ids.add(componente.productoId);
+      }
     }
     if ("extras" in linea) {
       for (const extra of linea.extras ?? []) {
@@ -72,16 +77,20 @@ async function cargarCatalogo(lineas: LineaEntrada[]) {
     .filter((l) => l.tipoLinea === "PROMOCION")
     .map((l) => l.promocionId);
 
-  const [productos, promociones] = await Promise.all([
-    db.producto.findMany({
-      where: { id: { in: idsProductosDe(lineas) } },
-      include: { variantes: true },
-    }),
-    db.promocion.findMany({
-      where: { id: { in: idsPromos } },
-      include: { productos: true },
-    }),
-  ]);
+  // Primero las promos: sus componentes fijos también deben estar en el
+  // catálogo de productos aunque el cliente no los haya enviado.
+  const promociones = await db.promocion.findMany({
+    where: { id: { in: idsPromos } },
+    include: { productos: true },
+  });
+  const idsComponentesFijos = promociones.flatMap((p) =>
+    p.productos.flatMap((c) => (c.productoId ? [c.productoId] : []))
+  );
+
+  const productos = await db.producto.findMany({
+    where: { id: { in: [...idsProductosDe(lineas), ...idsComponentesFijos] } },
+    include: { variantes: true },
+  });
 
   return {
     productos: new Map<string, ProductoCatalogo>(
@@ -160,10 +169,14 @@ export async function crearVenta(datos: unknown): Promise<ResultadoVenta> {
   }
 
   // Precios SIEMPRE del servidor: catálogo fresco + reglas de lib/precios.ts
-  const catalogo = await cargarCatalogo(venta.lineas);
+  const ahora = new Date();
+  const [catalogo, festivo] = await Promise.all([
+    cargarCatalogo(venta.lineas),
+    esDiaFestivo(ahora),
+  ]);
   let lineas: LineaCalculada[];
   try {
-    lineas = calcularLineas(venta.lineas, catalogo, venta.canal, new Date());
+    lineas = calcularLineas(venta.lineas, catalogo, venta.canal, ahora, festivo);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Venta inválida" };
   }
@@ -266,10 +279,14 @@ export async function agregarLineas(datos: unknown): Promise<ResultadoVenta> {
     return { ok: false, error };
   }
 
-  const catalogo = await cargarCatalogo(parseo.data.lineas);
+  const ahora = new Date();
+  const [catalogo, festivo] = await Promise.all([
+    cargarCatalogo(parseo.data.lineas),
+    esDiaFestivo(ahora),
+  ]);
   let lineas: LineaCalculada[];
   try {
-    lineas = calcularLineas(parseo.data.lineas, catalogo, venta.canal, new Date());
+    lineas = calcularLineas(parseo.data.lineas, catalogo, venta.canal, ahora, festivo);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Líneas inválidas" };
   }

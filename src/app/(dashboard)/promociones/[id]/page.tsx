@@ -57,11 +57,18 @@ export default async function PaginaPromocionDetalle({
               fechaInicio: promocion.fechaInicio?.toISOString().slice(0, 10) ?? "",
               fechaFin: promocion.fechaFin?.toISOString().slice(0, 10) ?? "",
               diasSemana: promocion.diasSemana,
+              aplicaFestivos: promocion.aplicaFestivos,
               activa: promocion.activa,
               productos: promocion.productos.map((p) => ({
                 rol: p.rol,
                 productoId: p.productoId,
                 varianteId: p.varianteId,
+                categoriaPermitida: p.categoriaPermitida,
+                tamano: p.tamano ?? "",
+                maxSaboresOverride:
+                  p.maxSaboresOverride === null
+                    ? ""
+                    : String(p.maxSaboresOverride),
                 cantidad: String(p.cantidad),
               })),
             }}

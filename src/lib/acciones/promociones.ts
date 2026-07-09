@@ -20,7 +20,8 @@ function aDatosBd(datos: DatosPromocion) {
       precioEspecial: esDosPorUno ? null : datos.precioEspecial,
       ventaDomicilio: datos.ventaDomicilio,
       ventaEstablecimiento: datos.ventaEstablecimiento,
-      // PAQUETE se vende todos los días: sin temporada ni días.
+      // PAQUETE no maneja temporada, pero sí días de semana y festivos
+      // (los paquetes del menú son L-V).
       fechaInicio:
         !esPaquete && datos.fechaInicio
           ? new Date(`${datos.fechaInicio}T00:00:00.000Z`)
@@ -29,13 +30,19 @@ function aDatosBd(datos: DatosPromocion) {
         !esPaquete && datos.fechaFin
           ? new Date(`${datos.fechaFin}T00:00:00.000Z`)
           : null,
-      diasSemana: esPaquete ? [] : datos.diasSemana,
+      diasSemana: datos.diasSemana,
+      aplicaFestivos: datos.aplicaFestivos,
       activa: datos.activa,
     },
     productos: datos.productos.map((p) => ({
       rol: p.rol,
       productoId: p.productoId,
-      varianteId: p.varianteId,
+      varianteId: p.productoId ? p.varianteId : null,
+      categoriaPermitida: p.productoId ? null : p.categoriaPermitida,
+      tamano: p.tamano || null,
+      maxSaboresOverride: p.maxSaboresOverride
+        ? Number(p.maxSaboresOverride)
+        : null,
       cantidad: Number(p.cantidad),
     })),
   };

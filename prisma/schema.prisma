@@ -237,6 +237,7 @@ model Promocion {
   fechaInicio          DateTime? @map("fecha_inicio") @db.Date // null en PAQUETE
   fechaFin             DateTime? @map("fecha_fin") @db.Date
   diasSemana           Int[]     @map("dias_semana") // 0=dom..6=sáb; vacío = todos
+  aplicaFestivos       Boolean   @default(true) @map("aplica_festivos") // false: no vigente en dias_festivos
   activa               Boolean   @default(true)
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
@@ -250,9 +251,18 @@ model PromocionProducto {
   id          String           @id @default(uuid()) @db.Uuid
   promocionId String           @map("promocion_id") @db.Uuid
   rol         RolPromoProducto @default(REQUERIDO) // REGALO solo en DOS_POR_UNO
-  // null + rol REGALO = el usuario elige la pizza regalo al vender
+  // productoId null = componente a elegir al vender: en el 2x1 el regalo
+  // (cualquier especialidad); en PAQUETE/PROMOCION cualquier producto de
+  // `categoria_permitida` (ej. "pizzas especialidades", "hamburguesas")
   productoId  String?          @map("producto_id") @db.Uuid
-  varianteId  String?          @map("variante_id") @db.Uuid // tamaño fijado, si aplica
+  varianteId  String?          @map("variante_id") @db.Uuid // tamaño fijado (producto concreto)
+  // Componente libre: la categoría restringe la elección y `tamano` fija el
+  // tamaño por nombre (la variante concreta depende del producto elegido)
+  categoriaPermitida String? @map("categoria_permitida")
+  tamano             String?
+  // Alitas dentro de paquete: sobreescribe max_sabores de la variante
+  // (ej. orden de 10 permite 2 sabores, pero el paquete solo 1)
+  maxSaboresOverride Int?    @map("max_sabores_override")
   cantidad    Int              @default(1)
   promocion   Promocion        @relation(fields: [promocionId], references: [id])
 
@@ -396,6 +406,19 @@ model VentaDetalleMitad {
 
   @@unique([detalleId, mitad])
   @@map("venta_detalle_mitades")
+}
+
+// Catálogo global de días festivos (todas las sucursales): las promociones
+// con aplica_festivos = false no se venden en estas fechas. CRUD en
+// Configuración, solo ADMINISTRADOR. Alta/baja directa: es catálogo de
+// fechas, no dato operativo auditable.
+model DiaFestivo {
+  id          String   @id @default(uuid()) @db.Uuid
+  fecha       DateTime @unique @db.Date
+  descripcion String // "25 de diciembre — Navidad"
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("dias_festivos")
 }
 
 model ConfiguracionSucursal {

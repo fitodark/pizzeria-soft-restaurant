@@ -92,7 +92,10 @@ export function ExtrasNotasDialog({
           {extrasDisponibles.length > 0 ? (
             <div className="space-y-2">
               <Label>Extras cobrables</Label>
-              {extrasDisponibles.map((extra) => (
+              {/* El catálogo real trae 20+ extras: la lista scrollea para no
+                  sacar del viewport las notas y el botón Guardar (1366×768) */}
+              <div className="max-h-[38vh] space-y-2 overflow-y-auto pr-1">
+                {extrasDisponibles.map((extra) => (
                 <div
                   key={extra.id}
                   className="flex items-center justify-between rounded-lg border p-2 pl-3"
@@ -130,7 +133,8 @@ export function ExtrasNotasDialog({
                     </Button>
                   </div>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : null}
           <div className="space-y-2">

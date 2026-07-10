@@ -5,6 +5,7 @@ import { Home, Search, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { buscarClienteVenta, type ClienteVenta } from "@/lib/acciones/clientes";
 import { ClienteVentaDialog } from "@/components/ventas/ClienteVentaDialog";
+import { DireccionVentaDialog } from "@/components/ventas/DireccionVentaDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,8 +22,6 @@ type Props = {
   onCliente: (cliente: ClienteVenta | null) => void;
   direccionId: string;
   onDireccion: (direccionId: string) => void;
-  pagaCon: string;
-  onPagaCon: (pagaCon: string) => void;
 };
 
 /** Paso 1: canal + referencia (mesa) o cliente/dirección a domicilio. */
@@ -35,8 +34,6 @@ export function PasoCliente({
   onCliente,
   direccionId,
   onDireccion,
-  pagaCon,
-  onPagaCon,
 }: Props) {
   const [telefono, setTelefono] = useState("");
   const [sinResultado, setSinResultado] = useState(false);
@@ -63,8 +60,18 @@ export function PasoCliente({
     onDireccion(encontrado.direcciones[0]?.id ?? "");
     setSinResultado(false);
     if (encontrado.direcciones.length === 0) {
-      toast.error("El cliente no tiene direcciones activas; captúrale una en Clientes.");
+      toast.info('El cliente no tiene direcciones activas; regístrale una con "Nueva dirección".');
     }
+  };
+
+  // Regla: un cliente puede tener n direcciones y el pedido puede ir a una
+  // nueva capturada aquí mismo — se agrega a la lista y queda seleccionada.
+  const agregarDireccion = (
+    actual: ClienteVenta,
+    nueva: ClienteVenta["direcciones"][number]
+  ) => {
+    onCliente({ ...actual, direcciones: [...actual.direcciones, nueva] });
+    onDireccion(nueva.id);
   };
 
   const canales: {
@@ -164,20 +171,10 @@ export function PasoCliente({
                 </button>
               ))}
             </div>
-          </div>
-          <div className="max-w-xs space-y-2">
-            <Label htmlFor="paga-con">Paga con (opcional)</Label>
-            <Input
-              id="paga-con"
-              className="h-11 text-right tabular-nums"
-              inputMode="decimal"
-              placeholder="500.00"
-              value={pagaCon}
-              onChange={(e) => onPagaCon(e.target.value)}
+            <DireccionVentaDialog
+              cliente={cliente}
+              onCreada={(nueva) => agregarDireccion(cliente, nueva)}
             />
-            <p className="text-sm text-muted-foreground">
-              Para llevar el cambio calculado al domicilio.
-            </p>
           </div>
         </div>
       ) : (

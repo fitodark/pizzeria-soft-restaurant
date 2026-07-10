@@ -2,6 +2,7 @@
 
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,6 +29,8 @@ type Props = {
   metodoPago: MetodoPago;
   extrasDisponibles: ExtraWizard[];
   onMetodoPago: (metodo: MetodoPago) => void;
+  /** "Paga con" se pregunta aquí, al leer la confirmación al cliente. */
+  onPagaCon: (pagaCon: string) => void;
   onCantidad: (uid: string, delta: number) => void;
   onQuitar: (uid: string) => void;
   onExtrasNotas: (uid: string, extras: ExtraCarrito[], notas: string) => void;
@@ -41,10 +44,17 @@ export function PasoResumen({
   metodoPago,
   extrasDisponibles,
   onMetodoPago,
+  onPagaCon,
   onCantidad,
   onQuitar,
   onExtrasNotas,
 }: Props) {
+  const totalCents = totalCarritoCents(lineas);
+  const pagaConCents =
+    domicilio && /^\d+(\.\d{1,2})?$/.test(domicilio.pagaCon.trim())
+      ? Math.round(Number(domicilio.pagaCon.trim()) * 100)
+      : null;
+
   if (lineas.length === 0) {
     return (
       <p className="py-12 text-center text-muted-foreground">
@@ -136,22 +146,41 @@ export function PasoResumen({
       </ul>
 
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="w-56 space-y-2">
-          <Label>Método de pago</Label>
-          <Select
-            value={metodoPago}
-            onValueChange={(v) => onMetodoPago(v as MetodoPago)}
-          >
-            <SelectTrigger className="h-11 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-              <SelectItem value="TRANSFERENCIA">
-                Transferencia (por validar)
-              </SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="w-56 space-y-2">
+            <Label>Método de pago</Label>
+            <Select
+              value={metodoPago}
+              onValueChange={(v) => onMetodoPago(v as MetodoPago)}
+            >
+              <SelectTrigger className="h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                <SelectItem value="TRANSFERENCIA">
+                  Transferencia (por validar)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {domicilio ? (
+            <div className="w-56 space-y-2">
+              <Label htmlFor="paga-con">Paga con (opcional)</Label>
+              <Input
+                id="paga-con"
+                className="h-11 text-right tabular-nums"
+                inputMode="decimal"
+                placeholder="500.00"
+                value={domicilio.pagaCon}
+                onChange={(e) => onPagaCon(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Pregúntalo al confirmar el pedido; el repartidor lleva el
+                cambio calculado.
+              </p>
+            </div>
+          ) : null}
         </div>
         <div className="text-right">
           {domicilio ? (
@@ -163,17 +192,19 @@ export function PasoResumen({
           ) : null}
           <p className="text-sm text-muted-foreground">Total</p>
           <p className="text-3xl font-semibold tabular-nums">
-            {formatoCents(totalCarritoCents(lineas))}
+            {formatoCents(totalCents)}
           </p>
-          {domicilio?.pagaCon ? (
-            <p className="text-sm text-muted-foreground tabular-nums">
-              Paga con {formatoCents(Math.round(Number(domicilio.pagaCon) * 100))}{" "}
-              · Cambio a llevar:{" "}
-              {formatoCents(
-                Math.round(Number(domicilio.pagaCon) * 100) -
-                  totalCarritoCents(lineas)
-              )}
-            </p>
+          {pagaConCents !== null ? (
+            pagaConCents >= totalCents ? (
+              <p className="text-sm text-muted-foreground tabular-nums">
+                Paga con {formatoCents(pagaConCents)} · Cambio a llevar:{" "}
+                {formatoCents(pagaConCents - totalCents)}
+              </p>
+            ) : (
+              <p className="text-sm text-destructive tabular-nums">
+                El monto no cubre el total del pedido.
+              </p>
+            )
           ) : null}
         </div>
       </div>

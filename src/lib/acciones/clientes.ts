@@ -207,6 +207,49 @@ export async function crearClienteVenta(
   }
 }
 
+type ResultadoDireccionVenta =
+  | { ok: true; direccion: ClienteVenta["direcciones"][number] }
+  | { ok: false; error: string };
+
+/** Alta rápida de dirección desde el paso 1 del wizard: un cliente puede
+ *  tener n direcciones y el pedido puede ir a una nueva. Se devuelve la
+ *  dirección creada para seleccionarla como destino de la venta. */
+export async function agregarDireccionVenta(
+  clienteId: string,
+  datos: unknown
+): Promise<ResultadoDireccionVenta> {
+  const sesion = await getSesion();
+  verificarPermiso(sesion.rol, "clientes.gestionar");
+
+  const parseo = esquemaDireccion.omit({ activa: true }).safeParse(datos);
+  if (!parseo.success) {
+    return { ok: false, error: parseo.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId } });
+  if (!cliente) {
+    return { ok: false, error: "El cliente no existe." };
+  }
+
+  const creada = await db.clienteDireccion.create({
+    data: {
+      clienteId,
+      direccion: parseo.data.direccion,
+      referencia: parseo.data.referencia || null,
+    },
+  });
+
+  revalidatePath(`/clientes/${clienteId}`);
+  return {
+    ok: true,
+    direccion: {
+      id: creada.id,
+      direccion: creada.direccion,
+      referencia: creada.referencia,
+    },
+  };
+}
+
 export async function actualizarDireccion(
   direccionId: string,
   datos: unknown

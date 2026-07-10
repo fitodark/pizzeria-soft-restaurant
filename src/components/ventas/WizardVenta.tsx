@@ -297,8 +297,6 @@ export function WizardVenta({ catalogo }: Props) {
           onCliente={setCliente}
           direccionId={direccionId}
           onDireccion={setDireccionId}
-          pagaCon={pagaCon}
-          onPagaCon={setPagaCon}
         />
       ) : null}
       {paso === 2 ? (
@@ -338,6 +336,7 @@ export function WizardVenta({ catalogo }: Props) {
           metodoPago={metodoPago}
           extrasDisponibles={catalogo.extras}
           onMetodoPago={setMetodoPago}
+          onPagaCon={setPagaCon}
           onCantidad={cambiarCantidad}
           onQuitar={quitar}
           onExtrasNotas={setExtrasNotas}

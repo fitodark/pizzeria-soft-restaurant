@@ -77,13 +77,12 @@ test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
   await iniciarSesion(page, "Centro");
   await asegurarCorteAbierto(page);
 
-  // Paso 1: cliente por teléfono + paga con
+  // Paso 1: cliente por teléfono
   await page.goto("/ventas/nueva");
   await page.getByText("Domicilio", { exact: true }).click();
   await page.locator("#telefono-cliente").fill("3311122233");
   await page.getByRole("button", { name: "Buscar" }).click();
   await expect(page.getByText("Juan Pérez")).toBeVisible();
-  await page.locator("#paga-con").fill("700");
 
   // Paso 3: pizza personalizada mezclando categorías (ambas $210 en grande);
   // los paquetes reales son solo sucursal, así que a domicilio no aparecen
@@ -108,6 +107,9 @@ test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
 
   // Total 210 (personalizada grande) + 25 (extra) = 235
   await expect(page.getByText("$235.00").first()).toBeVisible();
+
+  // "Paga con" se pregunta aquí, al leer la confirmación al cliente
+  await page.locator("#paga-con").fill("700");
   await expect(page.getByText("Cambio a llevar: $465.00")).toBeVisible();
   await page.getByRole("button", { name: "Confirmar venta" }).click();
   await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();

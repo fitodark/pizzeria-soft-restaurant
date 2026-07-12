@@ -76,7 +76,7 @@ export function PizzaPersonalizadaDialog({ especialidades, onAgregar }: Props) {
           Pizza personalizada
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Pizza personalizada (2 mitades)</DialogTitle>
           <DialogDescription>
@@ -86,13 +86,13 @@ export function PizzaPersonalizadaDialog({ especialidades, onAgregar }: Props) {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Tamaño</Label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {tamanos.map((t) => (
                 <Button
                   key={t}
                   type="button"
                   variant={t === tamano ? "default" : "outline"}
-                  className="h-11 flex-1 capitalize"
+                  className="h-11 px-2 capitalize"
                   onClick={() => {
                     setTamano(t);
                     setMitad1Id("");

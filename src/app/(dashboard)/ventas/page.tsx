@@ -119,7 +119,8 @@ export default async function PaginaVentas() {
     db.venta.findMany({
       where: { ...filtroBase, estatus: EstatusVenta.PENDIENTE },
       include: { cliente: { select: { nombre: true } } },
-      orderBy: { createdAt: "asc" },
+      // QA: la más reciente primero, igual que el historial
+      orderBy: { createdAt: "desc" },
     }),
     db.venta.findMany({
       where: { ...filtroBase, estatus: { not: EstatusVenta.PENDIENTE } },

@@ -93,10 +93,12 @@ export default async function PaginaReportes({ searchParams }: Props) {
         sucursales={sucursales}
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Tarjeta titulo="Ingresos" monto={totales.ingresos} clase="text-success" />
+        <Tarjeta titulo="Transferencias" monto={totales.transferencias} />
         <Tarjeta titulo="Egresos" monto={totales.egresos} clase="text-destructive" />
         <Tarjeta titulo="Neto" monto={totales.neto} />
+        <Tarjeta titulo="Neto en efectivo" monto={totales.netoEfectivo} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

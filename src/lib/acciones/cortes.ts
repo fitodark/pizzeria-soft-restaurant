@@ -15,6 +15,7 @@ import { Prisma } from "@/generated/prisma/client";
 import {
   EstatusCorte,
   EstatusVenta,
+  MetodoPago,
   OrigenMovimiento,
   TipoMovimiento,
 } from "@/generated/prisma/enums";
@@ -180,7 +181,7 @@ export async function cerrarCorte(datos: unknown): Promise<Resultado> {
       };
     }
 
-    const [ingresos, egresos] = await Promise.all([
+    const [ingresos, egresos, transferencias] = await Promise.all([
       tx.movimientoCorte.aggregate({
         where: { corteId: corte.id, activo: true, tipo: TipoMovimiento.INGRESO },
         _sum: { monto: true },
@@ -189,10 +190,20 @@ export async function cerrarCorte(datos: unknown): Promise<Resultado> {
         where: { corteId: corte.id, activo: true, tipo: TipoMovimiento.EGRESO },
         _sum: { monto: true },
       }),
+      tx.venta.aggregate({
+        where: {
+          corteId: corte.id,
+          estatus: EstatusVenta.COBRADA,
+          metodoPago: MetodoPago.TRANSFERENCIA,
+        },
+        _sum: { total: true },
+      }),
     ]);
     const totalIngresos = ingresos._sum.monto ?? new Prisma.Decimal(0);
     const totalEgresos = egresos._sum.monto ?? new Prisma.Decimal(0);
+    // saldoFinal incluye transferencias; el efectivo esperado las descuenta
     const saldoFinal = corte.saldoInicial.plus(totalIngresos).minus(totalEgresos);
+    const totalTransferencias = transferencias._sum.total ?? new Prisma.Decimal(0);
 
     await tx.corteCaja.update({
       where: { id: corte.id },
@@ -203,6 +214,7 @@ export async function cerrarCorte(datos: unknown): Promise<Resultado> {
         totalIngresos,
         totalEgresos,
         saldoFinal,
+        totalTransferencias,
         notasCierre: parseo.data.notasCierre || null,
       },
     });

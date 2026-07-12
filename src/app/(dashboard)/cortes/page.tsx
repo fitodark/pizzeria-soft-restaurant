@@ -4,7 +4,11 @@ import { ShoppingBasket } from "lucide-react";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
-import { corteAbierto, totalesCorte } from "@/lib/consultas/cortes";
+import {
+  corteAbierto,
+  efectivoEsperado,
+  totalesCorte,
+} from "@/lib/consultas/cortes";
 import { formatoFecha, formatoMoneda } from "@/lib/utils";
 import { AperturaCorteDialog } from "@/components/cortes/AperturaCorteDialog";
 import { CierreCorteDialog } from "@/components/cortes/CierreCorteDialog";
@@ -45,10 +49,9 @@ export default async function PaginaCortes() {
 
   const corte = await corteAbierto(sesion.sucursalId);
   const totales = corte ? await totalesCorte(corte.id) : null;
-  const saldoEsperado =
-    corte && totales
-      ? corte.saldoInicial.plus(totales.ingresos).minus(totales.egresos)
-      : null;
+  // Las transferencias son ingreso pero no están en el cajón
+  const efectivo =
+    corte && totales ? efectivoEsperado(corte.saldoInicial, totales) : null;
 
   const [historial, asignaciones] = await Promise.all([
     db.corteCaja.findMany({
@@ -82,7 +85,7 @@ export default async function PaginaCortes() {
         {!corte ? <AperturaCorteDialog /> : null}
       </div>
 
-      {corte && totales && saldoEsperado ? (
+      {corte && totales && efectivo ? (
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -98,7 +101,7 @@ export default async function PaginaCortes() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
               <div>
                 <p className="text-sm text-muted-foreground">Saldo inicial</p>
                 <p className="text-xl font-semibold tabular-nums">
@@ -112,15 +115,28 @@ export default async function PaginaCortes() {
                 </p>
               </div>
               <div>
+                <p className="text-sm text-muted-foreground">Transferencias</p>
+                <p className="text-xl font-semibold tabular-nums">
+                  {formatoMoneda(totales.transferencias.toString())}
+                </p>
+                {totales.transferenciasPorValidar > 0 ? (
+                  <p className="text-sm text-secondary">
+                    {totales.transferenciasPorValidar} por validar
+                  </p>
+                ) : null}
+              </div>
+              <div>
                 <p className="text-sm text-muted-foreground">Egresos activos</p>
                 <p className="text-xl font-semibold tabular-nums text-destructive">
                   −{formatoMoneda(totales.egresos.toString())}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Saldo esperado</p>
+                <p className="text-sm text-muted-foreground">
+                  Efectivo esperado en caja
+                </p>
                 <p className="text-xl font-semibold tabular-nums">
-                  {formatoMoneda(saldoEsperado.toString())}
+                  {formatoMoneda(efectivo.toString())}
                 </p>
               </div>
             </div>
@@ -139,8 +155,9 @@ export default async function PaginaCortes() {
               <CierreCorteDialog
                 saldoInicial={corte.saldoInicial.toString()}
                 ingresos={totales.ingresos.toString()}
+                transferencias={totales.transferencias.toString()}
                 egresos={totales.egresos.toString()}
-                saldoEsperado={saldoEsperado.toString()}
+                efectivoEsperado={efectivo.toString()}
               />
             </div>
           </CardContent>
@@ -165,8 +182,10 @@ export default async function PaginaCortes() {
                 <TableHead>Cierre</TableHead>
                 <TableHead className="text-right">Saldo inicial</TableHead>
                 <TableHead className="text-right">Ingresos</TableHead>
+                <TableHead className="text-right">Transferencias</TableHead>
                 <TableHead className="text-right">Egresos</TableHead>
                 <TableHead className="text-right">Saldo final</TableHead>
+                <TableHead className="text-right">Efectivo en caja</TableHead>
                 <TableHead>Estatus</TableHead>
               </TableRow>
             </TableHeader>
@@ -174,7 +193,7 @@ export default async function PaginaCortes() {
               {historial.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={9}
                     className="h-24 text-center text-muted-foreground"
                   >
                     Sin cortes registrados.
@@ -203,12 +222,26 @@ export default async function PaginaCortes() {
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
+                      {c.totalTransferencias
+                        ? formatoMoneda(c.totalTransferencias.toString())
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
                       {c.totalEgresos
                         ? formatoMoneda(c.totalEgresos.toString())
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">
+                    <TableCell className="text-right tabular-nums">
                       {c.saldoFinal ? formatoMoneda(c.saldoFinal.toString()) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {c.saldoFinal
+                        ? formatoMoneda(
+                            c.saldoFinal
+                              .minus(c.totalTransferencias ?? 0)
+                              .toString()
+                          )
+                        : "—"}
                     </TableCell>
                     <TableCell>
                       {c.estatus === "ABIERTO" ? (

@@ -60,7 +60,7 @@ test("flujo 1: abrir corte → venta establecimiento → cobrar → cerrar corte
   // Cerrar el corte (sin pendientes) y verificar el ciclo completo
   await page.goto("/cortes");
   await page.getByRole("button", { name: "Cerrar corte" }).click();
-  await expect(page.getByText("Saldo esperado en caja")).toBeVisible();
+  await expect(page.getByText("Efectivo esperado en caja")).toBeVisible();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Cerrar corte" })
@@ -304,6 +304,47 @@ test("flujo 6: cancelar venta pendiente con motivo, PIN y egreso en el corte", a
   await expect(
     page.getByText(/Cancelación venta #\d+ — Cliente no aceptó/).first()
   ).toBeVisible();
+});
+
+test("flujo 7: la venta por transferencia no infla el efectivo esperado", async ({
+  page,
+}) => {
+  await iniciarSesion(page, "Centro");
+  await asegurarCorteAbierto(page);
+
+  const efectivoEnCaja = () =>
+    page
+      .getByText("Efectivo esperado en caja", { exact: true })
+      .locator("xpath=following-sibling::p")
+      .first()
+      .textContent();
+
+  await page.goto("/cortes");
+  const efectivoAntes = await efectivoEnCaja();
+
+  // Venta de mesa cobrada por transferencia ($15)
+  await page.goto("/ventas/nueva");
+  await page.locator("#mesa").fill("10");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await agregarProductoWizard(page, "Agua embotellada");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("combobox").click();
+  await page.getByRole("option", { name: /Transferencia/ }).click();
+  await page.getByRole("button", { name: "Confirmar venta" }).click();
+  await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
+  await page.waitForURL("**/ventas");
+
+  await abrirVentaPendiente(page, "Mesa 10");
+  await page.getByRole("button", { name: "Cobrar" }).click();
+  await page.getByRole("button", { name: "Confirmar cobro" }).click();
+  await expect(page.getByText("Venta cobrada.")).toBeVisible();
+  await page.waitForURL("**/ventas");
+
+  // El corte separa la transferencia y el efectivo esperado NO cambió
+  await page.goto("/cortes");
+  await expect(page.getByText(/\d+ por validar/)).toBeVisible();
+  expect(await efectivoEnCaja()).toBe(efectivoAntes);
 });
 
 test("flujo 3: inactivar línea con PIN y verificar auditoría como admin", async ({

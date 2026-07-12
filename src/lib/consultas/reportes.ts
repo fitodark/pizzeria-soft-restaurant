@@ -49,7 +49,15 @@ export type MovimientoReporte = {
 
 export type ReporteMovimientos = {
   movimientos: MovimientoReporte[];
-  totales: { ingresos: string; egresos: string; neto: string };
+  totales: {
+    ingresos: string;
+    egresos: string;
+    neto: string;
+    /** Ventas cobradas por transferencia (parte de los ingresos, no en caja). */
+    transferencias: string;
+    /** Neto en efectivo: neto − transferencias. */
+    netoEfectivo: string;
+  };
   /** Monto por origen (VENTA es ingreso; el resto egresos). */
   porOrigen: Record<OrigenMovimiento, string>;
   nomina: {
@@ -90,15 +98,28 @@ export async function reporteMovimientos(
 ): Promise<ReporteMovimientos> {
   const { desde, hasta } = limitesDeRango(rango);
 
-  const movimientos = await db.movimientoCorte.findMany({
-    where: {
-      activo: true,
-      createdAt: { gte: desde, lte: hasta },
-      ...(sucursalId ? { corte: { sucursalId } } : {}),
-    },
-    include: { corte: { select: { sucursalId: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [movimientos, ventasTransferencia] = await Promise.all([
+    db.movimientoCorte.findMany({
+      where: {
+        activo: true,
+        createdAt: { gte: desde, lte: hasta },
+        ...(sucursalId ? { corte: { sucursalId } } : {}),
+      },
+      include: { corte: { select: { sucursalId: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    // Ingreso que no pasó por el cajón: ventas cobradas por transferencia
+    db.venta.aggregate({
+      where: {
+        estatus: "COBRADA",
+        metodoPago: "TRANSFERENCIA",
+        cobradaAt: { gte: desde, lte: hasta },
+        ...(sucursalId ? { sucursalId } : {}),
+      },
+      _sum: { total: true },
+    }),
+  ]);
+  const transferencias = ventasTransferencia._sum.total ?? CERO;
 
   // MovimientoCorte no tiene relaciones a Perfil/Sucursal: cruce manual
   const idsUsuario = [...new Set(movimientos.map((m) => m.usuarioId))];
@@ -169,6 +190,8 @@ export async function reporteMovimientos(
       ingresos: ingresos.toFixed(2),
       egresos: egresos.toFixed(2),
       neto: ingresos.minus(egresos).toFixed(2),
+      transferencias: transferencias.toFixed(2),
+      netoEfectivo: ingresos.minus(egresos).minus(transferencias).toFixed(2),
     },
     porOrigen: {
       VENTA: porOrigen.VENTA.toFixed(2),

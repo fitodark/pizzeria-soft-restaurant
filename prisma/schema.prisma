@@ -284,7 +284,10 @@ model CorteCaja {
   fechaCierre       DateTime?    @map("fecha_cierre")
   totalIngresos     Decimal?     @map("total_ingresos") @db.Decimal(10, 2) // snapshot al cerrar
   totalEgresos      Decimal?     @map("total_egresos") @db.Decimal(10, 2)
-  saldoFinal        Decimal?     @map("saldo_final") @db.Decimal(10, 2)
+  saldoFinal        Decimal?     @map("saldo_final") @db.Decimal(10, 2) // incluye transferencias
+  // Ventas cobradas por transferencia (no están en el cajón):
+  // efectivo esperado = saldo_final − total_transferencias
+  totalTransferencias Decimal?   @map("total_transferencias") @db.Decimal(10, 2)
   notasCierre       String?      @map("notas_cierre")
 
   sucursal    Sucursal          @relation(fields: [sucursalId], references: [id])

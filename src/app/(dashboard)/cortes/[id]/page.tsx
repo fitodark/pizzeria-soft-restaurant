@@ -6,6 +6,7 @@ import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
 import { totalesCorte } from "@/lib/consultas/cortes";
 import { formatoFecha, formatoMoneda, cn } from "@/lib/utils";
+import { Prisma } from "@/generated/prisma/client";
 import { EstatusCorte, OrigenMovimiento, Rol } from "@/generated/prisma/enums";
 import { InactivarGastoBoton } from "@/components/cortes/InactivarGastoBoton";
 import { Badge } from "@/components/ui/badge";
@@ -73,9 +74,16 @@ export default async function PaginaCorteDetalle({
   const totales = abierto ? await totalesCorte(corte.id) : null;
   const ingresos = abierto ? totales!.ingresos.toString() : corte.totalIngresos?.toString() ?? "0";
   const egresos = abierto ? totales!.egresos.toString() : corte.totalEgresos?.toString() ?? "0";
+  const transferencias = abierto
+    ? totales!.transferencias.toString()
+    : corte.totalTransferencias?.toString() ?? "0";
   const saldoFinal = abierto
     ? corte.saldoInicial.plus(ingresos).minus(egresos).toString()
     : corte.saldoFinal?.toString() ?? "0";
+  // Las transferencias cuentan como ingreso pero no están en el cajón
+  const efectivo = new Prisma.Decimal(saldoFinal)
+    .minus(transferencias)
+    .toString();
 
   // Nombres de usuarios involucrados (sin FK en el esquema: se cruzan aquí).
   const idsUsuarios = new Set<string>();
@@ -124,7 +132,7 @@ export default async function PaginaCorteDetalle({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader>
             <CardDescription>Saldo inicial</CardDescription>
@@ -143,6 +151,19 @@ export default async function PaginaCorteDetalle({
         </Card>
         <Card>
           <CardHeader>
+            <CardDescription>
+              Transferencias
+              {totales && totales.transferenciasPorValidar > 0
+                ? ` (${totales.transferenciasPorValidar} por validar)`
+                : ""}
+            </CardDescription>
+            <CardTitle className="tabular-nums">
+              {formatoMoneda(transferencias)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
             <CardDescription>Egresos</CardDescription>
             <CardTitle className="tabular-nums text-destructive">
               −{formatoMoneda(egresos)}
@@ -151,11 +172,9 @@ export default async function PaginaCorteDetalle({
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>
-              {abierto ? "Saldo esperado" : "Saldo final"}
-            </CardDescription>
+            <CardDescription>Efectivo esperado en caja</CardDescription>
             <CardTitle className="tabular-nums">
-              {formatoMoneda(saldoFinal)}
+              {formatoMoneda(efectivo)}
             </CardTitle>
           </CardHeader>
         </Card>

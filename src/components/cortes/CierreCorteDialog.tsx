@@ -30,15 +30,18 @@ import { Textarea } from "@/components/ui/textarea";
 type Props = {
   saldoInicial: string;
   ingresos: string;
+  /** Ventas cobradas por transferencia: ingreso que NO está en el cajón. */
+  transferencias: string;
   egresos: string;
-  saldoEsperado: string;
+  efectivoEsperado: string;
 };
 
 export function CierreCorteDialog({
   saldoInicial,
   ingresos,
+  transferencias,
   egresos,
-  saldoEsperado,
+  efectivoEsperado,
 }: Props) {
   const [abierto, setAbierto] = useState(false);
   const [pendiente, startTransition] = useTransition();
@@ -88,14 +91,20 @@ export function CierreCorteDialog({
             </dd>
           </div>
           <div className="flex justify-between">
+            <dt className="text-muted-foreground">
+              Transferencias (no están en caja)
+            </dt>
+            <dd className="tabular-nums">−{formatoMoneda(transferencias)}</dd>
+          </div>
+          <div className="flex justify-between">
             <dt className="text-muted-foreground">Egresos activos</dt>
             <dd className="tabular-nums text-destructive">
               −{formatoMoneda(egresos)}
             </dd>
           </div>
           <div className="flex justify-between border-t pt-1 font-semibold">
-            <dt>Saldo esperado en caja</dt>
-            <dd className="tabular-nums">{formatoMoneda(saldoEsperado)}</dd>
+            <dt>Efectivo esperado en caja</dt>
+            <dd className="tabular-nums">{formatoMoneda(efectivoEsperado)}</dd>
           </div>
         </dl>
         <Form {...form}>

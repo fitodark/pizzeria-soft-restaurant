@@ -27,7 +27,10 @@ export function InactivarLineaDialog({ detalleId, titulo }: Props) {
   const [pin, setPin] = useState("");
   const [pendiente, startTransition] = useTransition();
 
-  const inactivar = () => {
+  // Enter con el PIN completo dispara el submit; el guard evita dobles
+  const inactivar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pendiente || pin.length !== 4) return;
     startTransition(async () => {
       const resultado = await inactivarLinea({ detalleId, pin });
       if (resultado.ok) {
@@ -60,7 +63,7 @@ export function InactivarLineaDialog({ detalleId, titulo }: Props) {
             Confirma con tu PIN.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={inactivar}>
           <div className="space-y-2">
             <Label htmlFor="pin-linea">PIN de seguridad</Label>
             <Input
@@ -75,14 +78,14 @@ export function InactivarLineaDialog({ detalleId, titulo }: Props) {
             />
           </div>
           <Button
+            type="submit"
             variant="destructive"
             className="h-11 w-full"
-            onClick={inactivar}
             disabled={pendiente || pin.length !== 4}
           >
             {pendiente ? "Inactivando…" : "Inactivar línea"}
           </Button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

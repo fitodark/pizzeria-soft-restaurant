@@ -395,8 +395,9 @@ test("flujo 3: inactivar línea con PIN y verificar auditoría como admin", asyn
   await page.locator("#pin-linea").fill("0000");
   await page.getByRole("button", { name: "Inactivar línea" }).click();
   await expect(page.getByText("PIN incorrecto.")).toBeVisible();
+  // Con el PIN completo, Enter ejecuta sin clic (pedido de QA)
   await page.locator("#pin-linea").fill(ADMIN.pin);
-  await page.getByRole("button", { name: "Inactivar línea" }).click();
+  await page.locator("#pin-linea").press("Enter");
   await expect(page.getByText("Línea inactivada.")).toBeVisible();
 
   // El admin ve la línea inactiva resaltada con quién la inactivó,

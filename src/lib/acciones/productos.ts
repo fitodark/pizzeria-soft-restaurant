@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSesion } from "@/lib/auth";
 import { verificarPermiso } from "@/lib/permisos";
-import { esquemaProducto } from "@/lib/esquemas/productos";
+import { aGruposExtras, esquemaProducto } from "@/lib/esquemas/productos";
 import { Prisma } from "@/generated/prisma/client";
 import type { Resultado } from "@/types";
 
@@ -22,11 +22,12 @@ export async function crearProducto(datos: unknown): Promise<Resultado> {
   if (!parseo.success) {
     return { ok: false, error: parseo.error.issues[0]?.message ?? "Datos inválidos" };
   }
-  const { variantes, descripcion, ...producto } = parseo.data;
+  const { variantes, descripcion, grupoExtras, ...producto } = parseo.data;
 
   await db.producto.create({
     data: {
       ...producto,
+      grupoExtras: aGruposExtras(grupoExtras),
       descripcion: descripcion || null,
       variantes: {
         create: variantes.map((v) => ({
@@ -54,7 +55,7 @@ export async function actualizarProducto(
   if (!parseo.success) {
     return { ok: false, error: parseo.error.issues[0]?.message ?? "Datos inválidos" };
   }
-  const { variantes, descripcion, ...producto } = parseo.data;
+  const { variantes, descripcion, grupoExtras, ...producto } = parseo.data;
 
   const existente = await db.producto.findUnique({
     where: { id },
@@ -74,7 +75,11 @@ export async function actualizarProducto(
     await db.$transaction(async (tx) => {
       await tx.producto.update({
         where: { id },
-        data: { ...producto, descripcion: descripcion || null },
+        data: {
+          ...producto,
+          grupoExtras: aGruposExtras(grupoExtras),
+          descripcion: descripcion || null,
+        },
       });
       for (const variante of variantes) {
         if (variante.id) {

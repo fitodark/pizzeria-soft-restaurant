@@ -158,7 +158,11 @@ export function PasoResumen({
                 {linea.permiteExtrasNotas ? (
                   <ExtrasNotasDialog
                     titulo={linea.titulo}
-                    extrasDisponibles={extrasDisponibles}
+                    extrasDisponibles={extrasDisponibles.filter(
+                      (e) =>
+                        e.grupos.length === 0 ||
+                        e.grupos.some((g) => linea.gruposExtras.includes(g))
+                    )}
                     extras={linea.extras}
                     notas={linea.notas}
                     onGuardar={(extras, notas) =>

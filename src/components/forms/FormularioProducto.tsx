@@ -92,6 +92,7 @@ export function FormularioProducto({ producto, categorias }: Props) {
       inventariable: false,
       esEspecialidad: false,
       permiteExtrasNotas: true,
+      grupoExtras: "",
       activo: true,
       variantes: [{ tamano: "unico", precio: "", maxSabores: 1, activa: true }],
     },
@@ -215,6 +216,24 @@ export function FormularioProducto({ producto, categorias }: Props) {
               <FormControl>
                 <Textarea placeholder="Jamón y piña…" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="grupoExtras"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Grupos de extras (separados por coma)</FormLabel>
+              <FormControl>
+                <Input className="h-11" placeholder="pizza, pastas" {...field} />
+              </FormControl>
+              <FormDescription>
+                En un producto de venta: qué extras se le ofrecen (vacío = solo
+                notas). En un extra: en qué productos aparece (vacío = en
+                todos).
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

@@ -143,6 +143,7 @@ async function main() {
         tipo: "COMIDA",
         categoria: "pizza",
         esEspecialidad: true,
+        grupoExtras: ["pizza"],
         variantes: {
           create: [
             { tamano: "chica", precio: esp.precios[0] },
@@ -205,6 +206,7 @@ async function main() {
         nombre: sabor,
         tipo: "COMIDA",
         categoria: "alitas",
+        grupoExtras: ["alitas"],
         variantes: { create: ordenesAlitas },
       },
     });
@@ -220,6 +222,7 @@ async function main() {
         tipoArticulo: "EXTRA",
         categoria: "extra",
         permiteExtrasNotas: false,
+        grupoExtras: ["alitas"],
         variantes: { create: { tamano: "unico", precio: "15" } },
       },
     });
@@ -234,6 +237,7 @@ async function main() {
       tipoArticulo: "EXTRA",
       categoria: "extra",
       permiteExtrasNotas: false,
+      grupoExtras: ["pizza"],
       variantes: { create: { tamano: "unico", precio: "25" } },
     },
   });

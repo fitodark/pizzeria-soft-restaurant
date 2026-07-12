@@ -39,6 +39,7 @@ function producto(
     ventaEstablecimiento: true,
     esEspecialidad: false,
     permiteExtrasNotas: true,
+    grupoExtras: [],
     variantes: [],
     ...extra,
   };
@@ -46,6 +47,7 @@ function producto(
 
 const hawaiana = producto("hawaiana", "Pizza Hawaiana", {
   esEspecialidad: true,
+  grupoExtras: ["pizza"],
   variantes: [
     { id: "haw-ch", tamano: "chica", precio: D(99), maxSabores: 1, activa: true },
     { id: "haw-gr", tamano: "grande", precio: D(179), maxSabores: 1, activa: true },
@@ -54,6 +56,7 @@ const hawaiana = producto("hawaiana", "Pizza Hawaiana", {
 
 const barbosa = producto("barbosa", "Pizza Barbosa", {
   esEspecialidad: true,
+  grupoExtras: ["pizza"],
   variantes: [
     { id: "bar-ch", tamano: "chica", precio: D(125), maxSabores: 1, activa: true },
     { id: "bar-gr", tamano: "grande", precio: D(215), maxSabores: 1, activa: true },
@@ -78,6 +81,25 @@ const queso = producto("queso", "Queso extra", {
 const hamburguesa = producto("hamb", "Hamburguesa", {
   permiteExtrasNotas: false,
   variantes: [{ id: "hamb-un", tamano: "unico", precio: D(80), maxSabores: 1, activa: true }],
+});
+
+// Extras con grupo: solo aplican a productos del mismo grupo
+const orilla = producto("orilla", "Orilla de queso", {
+  tipoArticulo: TipoArticulo.EXTRA,
+  permiteExtrasNotas: false,
+  grupoExtras: ["pizza"],
+  variantes: [
+    { id: "orilla-un", tamano: "unico", precio: D(45), maxSabores: 1, activa: true },
+  ],
+});
+
+const papasExtra = producto("papas", "Extra de papas", {
+  tipoArticulo: TipoArticulo.EXTRA,
+  permiteExtrasNotas: false,
+  grupoExtras: ["papas"],
+  variantes: [
+    { id: "papas-un", tamano: "unico", precio: D(20), maxSabores: 1, activa: true },
+  ],
 });
 
 // Sabores de alitas: precio fijo por orden; max_sabores limita la combinación
@@ -157,6 +179,8 @@ const catalogo = {
       barbosa,
       coca,
       queso,
+      orilla,
+      papasExtra,
       hamburguesa,
       alitasBbq,
       alitasBufalo,
@@ -441,6 +465,58 @@ describe("calcularLineas — extras y notas (regla 3)", () => {
         },
       ])
     ).toThrow(/no es un extra/);
+  });
+
+  it("acepta un extra del grupo del producto y rechaza el de otro grupo", () => {
+    const [linea] = calcular([
+      {
+        tipoLinea: "PRODUCTO",
+        productoId: "hawaiana", // grupo pizza
+        varianteId: "haw-ch",
+        cantidad: 1,
+        extras: [{ productoId: "orilla", cantidad: 1 }], // grupo pizza
+      },
+    ]);
+    expect(linea.extras[0].precioUnitario.toString()).toBe("45");
+
+    expect(() =>
+      calcular([
+        {
+          tipoLinea: "PRODUCTO",
+          productoId: "hawaiana",
+          varianteId: "haw-ch",
+          cantidad: 1,
+          extras: [{ productoId: "papas", cantidad: 1 }], // grupo papas
+        },
+      ])
+    ).toThrow(/no aplica para/);
+  });
+
+  it("la pizza personalizada hereda los grupos de sus mitades", () => {
+    const [linea] = calcular([
+      {
+        tipoLinea: "PIZZA_PERSONALIZADA",
+        tamano: "grande",
+        mitad1ProductoId: "hawaiana",
+        mitad2ProductoId: "barbosa",
+        cantidad: 1,
+        extras: [{ productoId: "orilla", cantidad: 1 }],
+      },
+    ]);
+    expect(linea.extras).toHaveLength(1);
+
+    expect(() =>
+      calcular([
+        {
+          tipoLinea: "PIZZA_PERSONALIZADA",
+          tamano: "grande",
+          mitad1ProductoId: "hawaiana",
+          mitad2ProductoId: "barbosa",
+          cantidad: 1,
+          extras: [{ productoId: "papas", cantidad: 1 }],
+        },
+      ])
+    ).toThrow(/no aplica para/);
   });
 });
 

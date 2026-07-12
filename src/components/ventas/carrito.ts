@@ -21,6 +21,8 @@ export type LineaCarrito = {
   cantidad: number;
   precioCents: number;
   permiteExtrasNotas: boolean;
+  /** Grupos de extras que admite la línea (vacío = solo notas). */
+  gruposExtras: string[];
   notas: string;
   extras: ExtraCarrito[];
   // PRODUCTO

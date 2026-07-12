@@ -176,6 +176,9 @@ model Producto {
   inventariable        Boolean      @default(false) // true: refrescos; false: pizzas
   esEspecialidad       Boolean      @default(false) @map("es_especialidad") // elegible como mitad
   permiteExtrasNotas   Boolean      @default(true) @map("permite_extras_notas")
+  // VENTA: grupos de extras que admite (vacío = solo notas).
+  // EXTRA: grupos donde se ofrece (vacío = universal).
+  grupoExtras          String[]     @default([]) @map("grupo_extras")
   activo               Boolean      @default(true)
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")

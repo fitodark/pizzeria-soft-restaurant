@@ -28,12 +28,20 @@ export type ProductoWizard = {
   tipo: "COMIDA" | "BEBIDA";
   esEspecialidad: boolean;
   permiteExtrasNotas: boolean;
+  /** Grupos de extras que el producto admite (vacío = solo notas). */
+  grupoExtras: string[];
   ventaDomicilio: boolean;
   ventaEstablecimiento: boolean;
   variantes: VarianteWizard[];
 };
 
-export type ExtraWizard = { id: string; nombre: string; precio: string };
+export type ExtraWizard = {
+  id: string;
+  nombre: string;
+  precio: string;
+  /** Grupos donde se ofrece el extra (vacío = universal). */
+  grupos: string[];
+};
 
 export type ReglaPromoWizard = {
   productoId: string | null;
@@ -108,6 +116,7 @@ export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
       tipo: p.tipo,
       esEspecialidad: p.esEspecialidad,
       permiteExtrasNotas: p.permiteExtrasNotas,
+      grupoExtras: p.grupoExtras,
       ventaDomicilio: p.ventaDomicilio,
       ventaEstablecimiento: p.ventaEstablecimiento,
       variantes: p.variantes.map((v) => ({
@@ -121,6 +130,7 @@ export async function catalogoWizard(fecha: Date): Promise<CatalogoWizard> {
       id: p.id,
       nombre: p.nombre,
       precio: p.variantes.find((v) => v.tamano === "unico")!.precio.toString(),
+      grupos: p.grupoExtras,
     })),
     promociones: promociones
       .map((p) => ({

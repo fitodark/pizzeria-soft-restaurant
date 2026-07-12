@@ -61,6 +61,7 @@ export default async function PaginaProductoDetalle({
               inventariable: producto.inventariable,
               esEspecialidad: producto.esEspecialidad,
               permiteExtrasNotas: producto.permiteExtrasNotas,
+              grupoExtras: producto.grupoExtras.join(", "),
               activo: producto.activo,
               variantes: producto.variantes.map((v) => ({
                 id: v.id,

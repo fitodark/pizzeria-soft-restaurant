@@ -39,6 +39,8 @@ export const esquemaProducto = z
     inventariable: z.boolean(),
     esEspecialidad: z.boolean(),
     permiteExtrasNotas: z.boolean(),
+    /** Texto separado por comas; se convierte a lista con aGruposExtras. */
+    grupoExtras: z.string().trim().max(120),
     activo: z.boolean(),
     variantes: z.array(esquemaVariante).min(1, "Agrega al menos una variante"),
   })
@@ -80,3 +82,16 @@ export const esquemaProducto = z
 
 export type DatosProducto = z.infer<typeof esquemaProducto>;
 export type DatosVariante = z.infer<typeof esquemaVariante>;
+
+/** "pizza, pastas" → ["pizza", "pastas"] (minúsculas, sin vacíos ni duplicados). */
+export function aGruposExtras(texto: string): string[] {
+  return [
+    ...new Set(
+      texto
+        .toLowerCase()
+        .split(",")
+        .map((g) => g.trim())
+        .filter(Boolean)
+    ),
+  ];
+}

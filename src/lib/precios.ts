@@ -121,6 +121,9 @@ export type ProductoCatalogo = {
   ventaEstablecimiento: boolean;
   esEspecialidad: boolean;
   permiteExtrasNotas: boolean;
+  /** VENTA: grupos de extras que admite; EXTRA: grupos donde se ofrece
+   *  (vacío = solo notas / universal, respectivamente). */
+  grupoExtras: string[];
   variantes: VarianteCatalogo[];
 };
 
@@ -254,11 +257,13 @@ function varianteDeTamano(
   return variante;
 }
 
-/** Regla 3: cada extra suma el precio de su variante "unico". */
+/** Regla 3: cada extra suma el precio de su variante "unico"; solo se
+ *  aceptan extras del grupo del producto (extra sin grupo = universal). */
 function calcularExtras(
   catalogo: Catalogo,
   canal: CanalVenta,
   padrePermiteExtras: boolean,
+  padreGrupos: string[],
   padreNombre: string,
   extras: ExtraEntrada[] | undefined,
   notas: string | undefined
@@ -274,6 +279,12 @@ function calcularExtras(
     const producto = obtenerProductoVendible(catalogo, extra.productoId, canal);
     if (producto.tipoArticulo !== TipoArticulo.EXTRA) {
       throw new Error(`"${producto.nombre}" no es un extra.`);
+    }
+    if (
+      producto.grupoExtras.length > 0 &&
+      !producto.grupoExtras.some((g) => padreGrupos.includes(g))
+    ) {
+      throw new Error(`"${producto.nombre}" no aplica para ${padreNombre}.`);
     }
     const variante = varianteDeTamano(producto, "unico");
     return {
@@ -314,6 +325,7 @@ function calcularLineaProducto(
       catalogo,
       canal,
       producto.permiteExtrasNotas,
+      producto.grupoExtras,
       producto.nombre,
       entrada.extras,
       entrada.notas
@@ -360,6 +372,7 @@ function calcularLineaPersonalizada(
       catalogo,
       canal,
       true, // la personalizada siempre admite extras/notas
+      [...new Set(mitades.flatMap((m) => m.producto.grupoExtras))],
       "Pizza personalizada",
       entrada.extras,
       entrada.notas
@@ -423,6 +436,7 @@ function calcularLineaAlitas(
       catalogo,
       canal,
       true, // la orden combinada siempre admite aderezos extra y notas
+      [...new Set(sabores.flatMap((s) => s.producto.grupoExtras))],
       "Alitas personalizadas",
       entrada.extras,
       entrada.notas

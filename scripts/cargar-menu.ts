@@ -686,6 +686,83 @@ async function cargar() {
   console.log(`  promociones/paquetes: ${promosCreadas} creados (con composición)`);
 }
 
+// ── Grupos de extras (validado con QA 2026-07-12) ─────────────────────────
+// VENTA: grupos que admite; EXTRA: grupos donde se ofrece. Sin grupo:
+// el producto solo lleva notas y el extra sería universal (no hay hoy).
+
+const GRUPOS_POR_CATEGORIA: Record<string, string[]> = {
+  "pizzas especialidades": ["pizza"],
+  "pizzas con pollo": ["pizza"],
+  "pizzas vegetarianas": ["pizza"],
+  "especial de la casa": ["pizza"],
+  "pizza especial": ["pizza"],
+  pastas: ["pastas"], // "admiten Pan de Ajo"
+  "snacks boneless": ["papas"], // "Admite extra de papas"
+  "snacks costillas": ["papas"],
+  tortas: ["papas"],
+  "burritos de costilla bbq": ["papas"],
+  "postres artesanales": ["fruta"], // "admite fruta extra"
+  "crepas especiales dulces": ["fruta"],
+  alitas: ["alitas"], // solo aderezos; papas sería pedido aparte
+};
+
+const GRUPOS_POR_EXTRA: Array<[RegExp, string[]]> = [
+  [/^(Orilla de queso|Deditos de queso|Queso extra)/, ["pizza"]],
+  [/^Pan de Ajo/, ["pizza", "pastas"]],
+  [/^Extra de papas/, ["papas"]],
+  [/^Fruta extra/, ["fruta"]],
+  [/^Aderezo/, ["alitas"]],
+];
+
+// Bebidas embotelladas/preparadas y rebanadas: sin extras y sin notas
+const CATEGORIAS_SIN_EXTRAS_NOTAS = [
+  "bebidas",
+  "refresco",
+  "refresco familiar",
+  "rebanadas",
+];
+
+/** Pasada idempotente: deja grupos y botón de extras/notas como el menú
+ *  manda, tanto en cargas nuevas como re-ejecuciones. */
+async function asignarGruposExtras() {
+  console.log("\n— Grupos de extras —");
+  // Estado base determinista antes de aplicar el mapeo
+  await db.producto.updateMany({
+    data: { grupoExtras: [], permiteExtrasNotas: true },
+  });
+
+  for (const [categoria, grupos] of Object.entries(GRUPOS_POR_CATEGORIA)) {
+    const r = await db.producto.updateMany({
+      where: { categoria, tipoArticulo: "VENTA" },
+      data: { grupoExtras: grupos },
+    });
+    console.log(`  ${categoria} → [${grupos.join(", ")}]: ${r.count} productos`);
+  }
+
+  const extras = await db.producto.findMany({
+    where: { tipoArticulo: "EXTRA" },
+    select: { id: true, nombre: true },
+  });
+  for (const extra of extras) {
+    const regla = GRUPOS_POR_EXTRA.find(([patron]) => patron.test(extra.nombre));
+    if (!regla) {
+      console.warn(`  ⚠️ extra sin grupo (quedará universal): ${extra.nombre}`);
+      continue;
+    }
+    await db.producto.update({
+      where: { id: extra.id },
+      data: { grupoExtras: regla[1] },
+    });
+  }
+  console.log(`  extras clasificados: ${extras.length}`);
+
+  const sinBoton = await db.producto.updateMany({
+    where: { categoria: { in: CATEGORIAS_SIN_EXTRAS_NOTAS } },
+    data: { permiteExtrasNotas: false },
+  });
+  console.log(`  sin extras/notas (bebidas y rebanadas): ${sinBoton.count} productos`);
+}
+
 async function resumen() {
   const productos = await db.producto.count();
   const variantes = await db.productoVariante.count();
@@ -705,6 +782,7 @@ async function resumen() {
 async function main() {
   await limpiar();
   await cargar();
+  await asignarGruposExtras();
   await resumen();
   await db.$disconnect();
 }

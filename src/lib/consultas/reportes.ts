@@ -131,6 +131,7 @@ export async function reporteMovimientos(
     GASTO: CERO,
     COMPRA_PROVEEDOR: CERO,
     SUELDO: CERO,
+    CANCELACION: CERO,
   };
   for (const m of movimientos) {
     if (m.tipo === TipoMovimiento.INGRESO) {
@@ -138,7 +139,13 @@ export async function reporteMovimientos(
     } else {
       egresos = egresos.plus(m.monto);
     }
-    porOrigen[m.origen] = porOrigen[m.origen].plus(m.monto);
+    // CANCELACION es un par neto cero: el desglose solo cuenta la pérdida
+    if (
+      m.origen !== OrigenMovimiento.CANCELACION ||
+      m.tipo === TipoMovimiento.EGRESO
+    ) {
+      porOrigen[m.origen] = porOrigen[m.origen].plus(m.monto);
+    }
   }
 
   const dias = differenceInCalendarDays(hasta, desde) + 1;
@@ -168,6 +175,7 @@ export async function reporteMovimientos(
       GASTO: porOrigen.GASTO.toFixed(2),
       COMPRA_PROVEEDOR: porOrigen.COMPRA_PROVEEDOR.toFixed(2),
       SUELDO: porOrigen.SUELDO.toFixed(2),
+      CANCELACION: porOrigen.CANCELACION.toFixed(2),
     },
     nomina: {
       pagado: porOrigen.SUELDO.toFixed(2),

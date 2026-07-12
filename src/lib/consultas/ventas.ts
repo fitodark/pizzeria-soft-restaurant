@@ -180,6 +180,8 @@ export type LineaVentaDTO = {
   tipoProducto: "COMIDA" | "BEBIDA" | null;
   cantidad: number;
   precioUnitario: string;
+  /** Pedido N de la mesa (ESTABLECIMIENTO); en DOMICILIO siempre 1. */
+  ronda: number;
   notas: string | null;
   activo: boolean;
   inactivadaPor: string | null;
@@ -201,6 +203,9 @@ export type VentaDTO = {
   cambio: string | null;
   createdAt: Date;
   cobradaAt: Date | null;
+  motivoCancelacion: string | null;
+  canceladaAt: Date | null;
+  canceladaPor: string | null;
   capturadaPor: string;
   cliente: { nombre: string; telefono: string } | null;
   direccion: string | null;
@@ -237,6 +242,7 @@ export async function ventaConDetalles(
   const idsPromo = new Set<string>();
   const idsUsuario = new Set<string>([venta.usuarioId]);
   if (venta.repartidorId) idsUsuario.add(venta.repartidorId);
+  if (venta.usuarioCancelaId) idsUsuario.add(venta.usuarioCancelaId);
   for (const d of detalles) {
     if (d.productoId) idsProducto.add(d.productoId);
     if (d.varianteId) idsVariante.add(d.varianteId);
@@ -308,6 +314,7 @@ export async function ventaConDetalles(
             : null,
       cantidad: d.cantidad,
       precioUnitario: d.precioUnitario.toString(),
+      ronda: d.ronda,
       notas: d.notas,
       activo: d.activo,
       inactivadaPor: d.usuarioInactivoId
@@ -340,6 +347,11 @@ export async function ventaConDetalles(
     cambio: venta.cambio?.toString() ?? null,
     createdAt: venta.createdAt,
     cobradaAt: venta.cobradaAt,
+    motivoCancelacion: venta.motivoCancelacion,
+    canceladaAt: venta.canceladaAt,
+    canceladaPor: venta.usuarioCancelaId
+      ? nombreUsuario.get(venta.usuarioCancelaId) ?? null
+      : null,
     capturadaPor: nombreUsuario.get(venta.usuarioId) ?? "?",
     cliente: venta.cliente,
     direccion: venta.direccion

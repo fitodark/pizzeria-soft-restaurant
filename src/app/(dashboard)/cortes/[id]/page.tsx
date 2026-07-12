@@ -30,6 +30,7 @@ const ETIQUETA_ORIGEN: Record<OrigenMovimiento, string> = {
   GASTO: "Gasto",
   COMPRA_PROVEEDOR: "Compra proveedor",
   SUELDO: "Sueldo",
+  CANCELACION: "Cancelación",
 };
 
 export default async function PaginaCorteDetalle({

@@ -25,6 +25,7 @@ const ORIGEN: Record<string, string> = {
   GASTO: "Gastos",
   COMPRA_PROVEEDOR: "Compras",
   SUELDO: "Sueldos",
+  CANCELACION: "Cancelaciones",
 };
 
 function Tarjeta({

@@ -4,8 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
-import { crearVenta } from "@/lib/acciones/ventas";
+import { agregarLineas, crearVenta } from "@/lib/acciones/ventas";
 import type { ClienteVenta } from "@/lib/acciones/clientes";
+import type { LineaPrevia } from "@/components/ventas/RondasPrevias";
 import { avisarFalloImpresion } from "@/components/ventas/reimpresion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,29 @@ import { CanalVenta, MetodoPago } from "@/generated/prisma/enums";
 
 const PASOS = ["Cliente", "Bebidas", "Comida", "Confirmación"];
 
-type Props = { catalogo: CatalogoWizard };
+/** Agregar productos a una venta PENDIENTE: el wizard arranca en Bebidas
+ *  (la mesa/cliente ya se conocen) y confirma con agregarLineas. */
+export type ModoAgregar = {
+  ventaId: string;
+  folio: number;
+  canal: CanalVenta;
+  mesa: string | null;
+  cliente: string | null;
+  /** Ronda que se captura (ESTABLECIMIENTO); en DOMICILIO no aplica. */
+  ronda: number;
+  lineasPrevias: LineaPrevia[];
+  totalPrevioCents: number;
+};
 
-export function WizardVenta({ catalogo }: Props) {
+type Props = { catalogo: CatalogoWizard; modoAgregar?: ModoAgregar };
+
+export function WizardVenta({ catalogo, modoAgregar }: Props) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
   const [paso, setPaso] = useState(1);
-  const [canal, setCanal] = useState<CanalVenta>(CanalVenta.ESTABLECIMIENTO);
+  const [canal, setCanal] = useState<CanalVenta>(
+    modoAgregar?.canal ?? CanalVenta.ESTABLECIMIENTO
+  );
   const [mesa, setMesa] = useState("");
   const [cliente, setCliente] = useState<ClienteVenta | null>(null);
   const [direccionId, setDireccionId] = useState("");
@@ -225,9 +242,43 @@ export function WizardVenta({ catalogo }: Props) {
     );
   };
 
-  const faltaCliente = esDomicilio && (!cliente || !direccionId);
+  const faltaCliente = !modoAgregar && esDomicilio && (!cliente || !direccionId);
+
+  // En modo agregar el paso Cliente no existe: la venta ya lo conoce
+  const pasos = modoAgregar ? PASOS.slice(1) : PASOS;
+  const pasoActual = pasos[paso - 1];
+
+  const confirmarAgregado = (agregado: ModoAgregar) => {
+    startTransition(async () => {
+      const resultado = await agregarLineas({
+        ventaId: agregado.ventaId,
+        lineas: aLineasEntrada(lineas),
+      });
+      if (resultado.ok) {
+        toast.success(
+          esDomicilio
+            ? `Productos agregados a la venta #${agregado.folio}; la comanda se reimprime completa.`
+            : `Ronda ${agregado.ronda} agregada a la venta #${agregado.folio}.`
+        );
+        if (resultado.avisoImpresion) {
+          avisarFalloImpresion(
+            resultado.avisoImpresion,
+            agregado.ventaId,
+            "comandas"
+          );
+        }
+        router.push(`/ventas/${agregado.ventaId}`);
+      } else {
+        toast.error(resultado.error);
+      }
+    });
+  };
 
   const confirmar = () => {
+    if (modoAgregar) {
+      confirmarAgregado(modoAgregar);
+      return;
+    }
     if (faltaCliente) {
       toast.error("La venta a domicilio necesita cliente y dirección (paso 1).");
       return;
@@ -260,9 +311,27 @@ export function WizardVenta({ catalogo }: Props) {
 
   return (
     <div className="space-y-6">
+      {modoAgregar ? (
+        <div className="rounded-xl border bg-card p-4">
+          <p className="font-medium">
+            Agregando a la venta #{modoAgregar.folio} ·{" "}
+            {esDomicilio
+              ? modoAgregar.cliente ?? "Domicilio"
+              : modoAgregar.mesa
+                ? `Mesa ${modoAgregar.mesa}`
+                : "Mostrador"}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {esDomicilio
+              ? "El pedido se reimprime completo en cocina: retira la comanda anterior antes de confirmar."
+              : `Ronda ${modoAgregar.ronda} de la mesa; la comanda saldrá solo con lo nuevo.`}
+          </p>
+        </div>
+      ) : null}
+
       {/* Indicador de pasos */}
       <ol className="flex flex-wrap items-center gap-2">
-        {PASOS.map((nombre, indice) => {
+        {pasos.map((nombre, indice) => {
           const numero = indice + 1;
           return (
             <li key={nombre} className="flex items-center gap-2">
@@ -279,7 +348,7 @@ export function WizardVenta({ catalogo }: Props) {
                 <span className="tabular-nums">{numero}</span>
                 {nombre}
               </button>
-              {numero < PASOS.length ? (
+              {numero < pasos.length ? (
                 <span className="text-muted-foreground">·</span>
               ) : null}
             </li>
@@ -287,7 +356,7 @@ export function WizardVenta({ catalogo }: Props) {
         })}
       </ol>
 
-      {paso === 1 ? (
+      {pasoActual === "Cliente" ? (
         <PasoCliente
           canal={canal}
           onCanal={cambiarCanal}
@@ -299,10 +368,10 @@ export function WizardVenta({ catalogo }: Props) {
           onDireccion={setDireccionId}
         />
       ) : null}
-      {paso === 2 ? (
+      {pasoActual === "Bebidas" ? (
         <PasoBebidas bebidas={bebidas} onAgregar={agregarProducto} />
       ) : null}
-      {paso === 3 ? (
+      {pasoActual === "Comida" ? (
         <PasoComida
           comidas={comidas}
           especialidades={especialidades}
@@ -318,12 +387,12 @@ export function WizardVenta({ catalogo }: Props) {
           onAgregar2x1={agregar2x1}
         />
       ) : null}
-      {paso === 4 ? (
+      {pasoActual === "Confirmación" ? (
         <PasoResumen
           lineas={lineas}
-          mesa={mesa}
+          mesa={modoAgregar ? modoAgregar.mesa ?? "" : mesa}
           domicilio={
-            esDomicilio && cliente
+            !modoAgregar && esDomicilio && cliente
               ? {
                   cliente: cliente.nombre,
                   direccion:
@@ -332,6 +401,16 @@ export function WizardVenta({ catalogo }: Props) {
                   pagaCon,
                 }
               : null
+          }
+          agregar={
+            modoAgregar
+              ? {
+                  esDomicilio,
+                  ronda: modoAgregar.ronda,
+                  lineasPrevias: modoAgregar.lineasPrevias,
+                  totalPrevioCents: modoAgregar.totalPrevioCents,
+                }
+              : undefined
           }
           metodoPago={metodoPago}
           extrasDisponibles={catalogo.extras}
@@ -356,10 +435,12 @@ export function WizardVenta({ catalogo }: Props) {
         </Button>
         <p className="text-lg font-semibold tabular-nums">
           {lineas.length > 0
-            ? `${lineas.length} línea(s) · ${formatoCents(totalCarritoCents(lineas))}`
+            ? modoAgregar
+              ? `${lineas.length} línea(s) nueva(s) · ${formatoCents(totalCarritoCents(lineas))} · Total: ${formatoCents(modoAgregar.totalPrevioCents + totalCarritoCents(lineas))}`
+              : `${lineas.length} línea(s) · ${formatoCents(totalCarritoCents(lineas))}`
             : "Pedido vacío"}
         </p>
-        {paso < 4 ? (
+        {paso < pasos.length ? (
           <Button className="h-11" onClick={() => setPaso((p) => p + 1)}>
             Siguiente
             <ArrowRight className="size-4" />
@@ -371,7 +452,11 @@ export function WizardVenta({ catalogo }: Props) {
             disabled={pendiente || lineas.length === 0}
           >
             <Check className="size-4" />
-            {pendiente ? "Registrando…" : "Confirmar venta"}
+            {pendiente
+              ? "Registrando…"
+              : modoAgregar
+                ? "Agregar a la venta"
+                : "Confirmar venta"}
           </Button>
         )}
       </div>

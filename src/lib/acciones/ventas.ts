@@ -19,6 +19,7 @@ import {
 import {
   esquemaAgregarLineas,
   esquemaAsignarRepartidor,
+  esquemaCancelarVenta,
   esquemaCobrarVenta,
   esquemaCrearVenta,
   esquemaInactivarLinea,
@@ -106,7 +107,8 @@ async function cargarCatalogo(lineas: LineaEntrada[]) {
 async function crearDetalle(
   tx: Prisma.TransactionClient,
   ventaId: string,
-  linea: LineaCalculada
+  linea: LineaCalculada,
+  ronda = 1
 ): Promise<string> {
   const detalle = await tx.ventaDetalle.create({
     data: {
@@ -117,6 +119,7 @@ async function crearDetalle(
       promocionId: linea.promocionId,
       cantidad: linea.cantidad,
       precioUnitario: linea.precioUnitario,
+      ronda,
       notas: linea.notas,
       mitades: {
         create: linea.mitades.map((m) => ({
@@ -137,6 +140,7 @@ async function crearDetalle(
         parentDetalleId: detalle.id,
         cantidad: extra.cantidad,
         precioUnitario: extra.precioUnitario,
+        ronda,
         notas: extra.notas,
       },
     });
@@ -291,17 +295,31 @@ export async function agregarLineas(datos: unknown): Promise<ResultadoVenta> {
     return { ok: false, error: e instanceof Error ? e.message : "Líneas inválidas" };
   }
 
+  // ESTABLECIMIENTO: cada agregado es una ronda nueva y su comanda sale sola.
+  // DOMICILIO: el pedido es uno solo (ronda 1) y la comanda se reimprime
+  // completa para que cocina lo atienda entero (el ticket previo se retira).
+  const esEstablecimiento = venta.canal === CanalVenta.ESTABLECIMIENTO;
   const nuevosIds = await db.$transaction(async (tx) => {
+    const ronda = esEstablecimiento
+      ? ((
+          await tx.ventaDetalle.aggregate({
+            where: { ventaId: venta.id },
+            _max: { ronda: true },
+          })
+        )._max.ronda ?? 0) + 1
+      : 1;
     const ids: string[] = [];
     for (const linea of lineas) {
-      ids.push(await crearDetalle(tx, venta.id, linea));
+      ids.push(await crearDetalle(tx, venta.id, linea, ronda));
     }
     await recalcularTotal(tx, venta.id);
     return ids;
   });
 
-  // Comanda SOLO de lo recién agregado
-  const avisos = await imprimirComandas(venta.id, nuevosIds);
+  const avisos = await imprimirComandas(
+    venta.id,
+    esEstablecimiento ? nuevosIds : undefined
+  );
 
   revalidatePath("/ventas");
   revalidatePath(`/ventas/${venta.id}`);
@@ -477,6 +495,104 @@ export async function cobrarVenta(datos: unknown): Promise<ResultadoAccion> {
     ok: true,
     avisoImpresion: avisos.length > 0 ? avisos.join(" ") : undefined,
   };
+}
+
+/**
+ * Cancela una venta PENDIENTE (pedido no aceptado) con motivo y PIN.
+ * El efectivo nunca entró a caja: se registra el par INGRESO+EGRESO
+ * (origen CANCELACION, neto cero) para que la pérdida quede visible como
+ * egreso que absorbe la sucursal sin descuadrar el corte. El producto ya
+ * preparado se descuenta del inventario como merma.
+ */
+export async function cancelarVenta(datos: unknown): Promise<ResultadoAccion> {
+  const sesion = await getSesion();
+  verificarPermiso(sesion.rol, "ventas.cancelar");
+
+  const parseo = esquemaCancelarVenta.safeParse(datos);
+  if (!parseo.success) {
+    return { ok: false, error: parseo.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  const perfil = await db.perfil.findUnique({
+    where: { id: sesion.usuario.id },
+    select: { pinHash: true },
+  });
+  if (!perfil || !(await bcrypt.compare(parseo.data.pin, perfil.pinHash))) {
+    return { ok: false, error: "PIN incorrecto." };
+  }
+
+  const { venta, error } = await ventaOperable(parseo.data.ventaId, sesion.sucursalId);
+  if (!venta) {
+    return { ok: false, error };
+  }
+
+  const consumo = await consumoInventariable(venta.id);
+
+  await db.$transaction(async (tx) => {
+    await tx.venta.update({
+      where: { id: venta.id },
+      data: {
+        estatus: EstatusVenta.CANCELADA,
+        motivoCancelacion: parseo.data.motivo,
+        canceladaAt: new Date(),
+        usuarioCancelaId: sesion.usuario.id,
+      },
+    });
+    if (venta.total.gt(0)) {
+      await tx.movimientoCorte.create({
+        data: {
+          corteId: venta.corteId,
+          tipo: TipoMovimiento.INGRESO,
+          origen: OrigenMovimiento.CANCELACION,
+          descripcion: `Venta #${venta.folio} (cancelada)`,
+          monto: venta.total,
+          usuarioId: sesion.usuario.id,
+          ventaId: venta.id,
+        },
+      });
+      await tx.movimientoCorte.create({
+        data: {
+          corteId: venta.corteId,
+          tipo: TipoMovimiento.EGRESO,
+          origen: OrigenMovimiento.CANCELACION,
+          descripcion: `Cancelación venta #${venta.folio} — ${parseo.data.motivo}`,
+          monto: venta.total,
+          usuarioId: sesion.usuario.id,
+          ventaId: venta.id,
+        },
+      });
+    }
+    // Merma: el producto se preparó aunque el pedido no se haya entregado
+    for (const { productoId, cantidad } of consumo) {
+      await tx.inventario.upsert({
+        where: {
+          sucursalId_productoId: { sucursalId: venta.sucursalId, productoId },
+        },
+        create: {
+          sucursalId: venta.sucursalId,
+          productoId,
+          existencia: new Prisma.Decimal(-cantidad),
+        },
+        update: { existencia: { decrement: cantidad } },
+      });
+      await tx.movimientoInventario.create({
+        data: {
+          sucursalId: venta.sucursalId,
+          productoId,
+          tipo: TipoMovInventario.SALIDA,
+          cantidad: new Prisma.Decimal(cantidad),
+          referencia: venta.id,
+          usuarioId: sesion.usuario.id,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/ventas");
+  revalidatePath(`/ventas/${venta.id}`);
+  revalidatePath("/cortes");
+  revalidatePath("/inventario");
+  return { ok: true };
 }
 
 /** Asigna repartidor (rol REPARTIDOR, activo y de la sucursal) a un domicilio. */

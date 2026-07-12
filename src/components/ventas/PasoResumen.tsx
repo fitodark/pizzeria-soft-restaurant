@@ -11,13 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { ExtrasNotasDialog } from "@/components/ventas/ExtrasNotasDialog";
+import { RondasPrevias, type LineaPrevia } from "@/components/ventas/RondasPrevias";
 import {
   formatoCents,
   totalCarritoCents,
   type ExtraCarrito,
   type LineaCarrito,
 } from "@/components/ventas/carrito";
+import { cn } from "@/lib/utils";
 import type { ExtraWizard } from "@/lib/consultas/ventas";
 import type { MetodoPago } from "@/generated/prisma/enums";
 
@@ -26,6 +29,13 @@ type Props = {
   mesa: string;
   /** Solo DOMICILIO: datos de entrega y pago anticipado. */
   domicilio: { cliente: string; direccion: string; pagaCon: string } | null;
+  /** Modo agregar a venta existente: rondas previas y sin sección de pago. */
+  agregar?: {
+    esDomicilio: boolean;
+    ronda: number;
+    lineasPrevias: LineaPrevia[];
+    totalPrevioCents: number;
+  };
   metodoPago: MetodoPago;
   extrasDisponibles: ExtraWizard[];
   onMetodoPago: (metodo: MetodoPago) => void;
@@ -41,6 +51,7 @@ export function PasoResumen({
   lineas,
   mesa,
   domicilio,
+  agregar,
   metodoPago,
   extrasDisponibles,
   onMetodoPago,
@@ -55,7 +66,7 @@ export function PasoResumen({
       ? Math.round(Number(domicilio.pagaCon.trim()) * 100)
       : null;
 
-  if (lineas.length === 0) {
+  if (lineas.length === 0 && !agregar) {
     return (
       <p className="py-12 text-center text-muted-foreground">
         El pedido está vacío. Regresa a bebidas o comida para agregar productos.
@@ -65,7 +76,32 @@ export function PasoResumen({
 
   return (
     <div className="space-y-6">
-      <ul className="divide-y rounded-xl border bg-card">
+      {agregar ? (
+        <>
+          <RondasPrevias
+            lineas={agregar.lineasPrevias}
+            esDomicilio={agregar.esDomicilio}
+          />
+          <Badge>
+            {agregar.esDomicilio
+              ? "Productos nuevos"
+              : `Ronda ${agregar.ronda} · nueva`}
+          </Badge>
+        </>
+      ) : null}
+      {lineas.length === 0 ? (
+        <p className="py-6 text-center text-muted-foreground">
+          Aún no hay productos nuevos. Regresa a bebidas o comida para
+          agregarlos.
+        </p>
+      ) : null}
+      <ul
+        className={cn(
+          "divide-y rounded-xl border bg-card",
+          agregar && "border-primary",
+          lineas.length === 0 && "hidden"
+        )}
+      >
         {lineas.map((linea) => (
           <li key={linea.uid} className="space-y-2 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -146,7 +182,9 @@ export function PasoResumen({
       </ul>
 
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-wrap items-start gap-4">
+        <div
+          className={cn("flex flex-wrap items-start gap-4", agregar && "hidden")}
+        >
           <div className="w-56 space-y-2">
             <Label>Método de pago</Label>
             <Select
@@ -190,10 +228,22 @@ export function PasoResumen({
           ) : mesa ? (
             <p className="text-sm text-muted-foreground">Mesa: {mesa}</p>
           ) : null}
-          <p className="text-sm text-muted-foreground">Total</p>
+          <p className="text-sm text-muted-foreground">
+            {agregar
+              ? agregar.esDomicilio
+                ? "Productos nuevos"
+                : `Total ronda ${agregar.ronda}`
+              : "Total"}
+          </p>
           <p className="text-3xl font-semibold tabular-nums">
             {formatoCents(totalCents)}
           </p>
+          {agregar ? (
+            <p className="text-sm text-muted-foreground tabular-nums">
+              Nuevo total de la venta:{" "}
+              {formatoCents(agregar.totalPrevioCents + totalCents)}
+            </p>
+          ) : null}
           {pagaConCents !== null ? (
             pagaConCents >= totalCents ? (
               <p className="text-sm text-muted-foreground tabular-nums">

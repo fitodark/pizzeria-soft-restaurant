@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import {
-  catalogoWizard,
   repartidoresDeSucursal,
   ventaConDetalles,
 } from "@/lib/consultas/ventas";
@@ -12,8 +11,8 @@ import { formatoFecha, formatoMoneda } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { AgregarLineasDialog } from "@/components/ventas/AgregarLineasDialog";
 import { AsignarRepartidorForm } from "@/components/ventas/AsignarRepartidorForm";
+import { CancelarVentaDialog } from "@/components/ventas/CancelarVentaDialog";
 import { CobrarDialog } from "@/components/ventas/CobrarDialog";
 import { ListaLineasVenta } from "@/components/ventas/ListaLineasVenta";
 import { ReimprimirBotones } from "@/components/ventas/ReimprimirBotones";
@@ -49,6 +48,7 @@ export default async function PaginaDetalleVenta({ params }: Props) {
   const pendiente = venta.estatus === "PENDIENTE";
   const puedeAgregar = pendiente && tienePermiso(sesion.rol, "ventas.agregarLineas");
   const puedeCobrar = pendiente && tienePermiso(sesion.rol, "ventas.cobrar");
+  const puedeCancelar = pendiente && tienePermiso(sesion.rol, "ventas.cancelar");
   const puedeInactivar =
     pendiente && tienePermiso(sesion.rol, "ventas.inactivarLinea");
   const puedeAsignar =
@@ -61,10 +61,9 @@ export default async function PaginaDetalleVenta({ params }: Props) {
     !venta.transferenciaValidada &&
     tienePermiso(sesion.rol, "ventas.validarTransferencia");
 
-  const [catalogo, repartidores] = await Promise.all([
-    puedeAgregar ? catalogoWizard(new Date()) : null,
-    puedeAsignar ? repartidoresDeSucursal(sesion.sucursalId) : [],
-  ]);
+  const repartidores = puedeAsignar
+    ? await repartidoresDeSucursal(sesion.sucursalId)
+    : [];
 
   return (
     <div className="space-y-6">
@@ -89,12 +88,13 @@ export default async function PaginaDetalleVenta({ params }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {puedeAgregar && catalogo ? (
-            <AgregarLineasDialog
-              ventaId={venta.id}
-              canal={venta.canal}
-              catalogo={catalogo}
-            />
+          {puedeAgregar ? (
+            <Button asChild variant="outline" className="h-11">
+              <Link href={`/ventas/${venta.id}/agregar`}>
+                <Plus className="size-4" />
+                Agregar productos
+              </Link>
+            </Button>
           ) : null}
           {puedeCobrar ? (
             <CobrarDialog
@@ -102,6 +102,9 @@ export default async function PaginaDetalleVenta({ params }: Props) {
               total={venta.total}
               metodoPago={venta.metodoPago}
             />
+          ) : null}
+          {puedeCancelar ? (
+            <CancelarVentaDialog ventaId={venta.id} folio={venta.folio} />
           ) : null}
           {puedeValidar ? <ValidarTransferenciaBoton ventaId={venta.id} /> : null}
           {tienePermiso(sesion.rol, "impresion.reimprimir") ? (
@@ -112,6 +115,19 @@ export default async function PaginaDetalleVenta({ params }: Props) {
           ) : null}
         </div>
       </div>
+
+      {venta.estatus === "CANCELADA" && venta.motivoCancelacion ? (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
+          <p className="font-medium text-destructive">
+            Venta cancelada — la pérdida la absorbe la sucursal
+          </p>
+          <p className="text-sm">Motivo: {venta.motivoCancelacion}</p>
+          <p className="text-sm text-muted-foreground">
+            Canceló {venta.canceladaPor ?? "?"}
+            {venta.canceladaAt ? ` · ${formatoFecha(venta.canceladaAt)}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

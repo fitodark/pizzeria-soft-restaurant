@@ -57,7 +57,8 @@ function Linea({
   );
 }
 
-/** Líneas de la venta; las inactivas llegan solo para ADMINISTRADOR. */
+/** Líneas de la venta; las inactivas llegan solo para ADMINISTRADOR.
+ *  ESTABLECIMIENTO con varias rondas: se agrupan bajo "Ronda N". */
 export function ListaLineasVenta({ lineas, puedeInactivar }: Props) {
   if (lineas.length === 0) {
     return (
@@ -66,29 +67,43 @@ export function ListaLineasVenta({ lineas, puedeInactivar }: Props) {
       </p>
     );
   }
+  const rondas = [...new Set(lineas.map((l) => l.ronda))].sort((a, b) => a - b);
   return (
-    <ul className="divide-y rounded-xl border bg-card">
-      {lineas.map((linea) => (
-        <li key={linea.id} className="space-y-2 p-3">
-          <Linea linea={linea} puedeInactivar={puedeInactivar} />
-          {linea.extras.map((extra) => (
-            <Linea
-              key={extra.id}
-              linea={extra}
-              puedeInactivar={puedeInactivar}
-              esExtra
-            />
-          ))}
-          {!linea.activo && linea.inactivadaPor ? (
-            <p className="text-xs text-destructive">
-              Inactivada por {linea.inactivadaPor}
-              {linea.fechaInactivacion
-                ? ` · ${formatoFecha(linea.fechaInactivacion)}`
-                : ""}
+    <div className="space-y-4">
+      {rondas.map((ronda) => (
+        <div key={ronda}>
+          {rondas.length > 1 ? (
+            <p className="mb-1 text-sm font-medium text-muted-foreground">
+              Ronda {ronda}
             </p>
           ) : null}
-        </li>
+          <ul className="divide-y rounded-xl border bg-card">
+            {lineas
+              .filter((l) => l.ronda === ronda)
+              .map((linea) => (
+                <li key={linea.id} className="space-y-2 p-3">
+                  <Linea linea={linea} puedeInactivar={puedeInactivar} />
+                  {linea.extras.map((extra) => (
+                    <Linea
+                      key={extra.id}
+                      linea={extra}
+                      puedeInactivar={puedeInactivar}
+                      esExtra
+                    />
+                  ))}
+                  {!linea.activo && linea.inactivadaPor ? (
+                    <p className="text-xs text-destructive">
+                      Inactivada por {linea.inactivadaPor}
+                      {linea.fechaInactivacion
+                        ? ` · ${formatoFecha(linea.fechaInactivacion)}`
+                        : ""}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }

@@ -59,6 +59,7 @@ enum OrigenMovimiento {
   GASTO
   COMPRA_PROVEEDOR
   SUELDO
+  CANCELACION // par INGRESO+EGRESO neto cero: la pérdida la absorbe la sucursal
 }
 
 enum CanalVenta {
@@ -362,6 +363,10 @@ model Venta {
   usuarioId             String       @map("usuario_id") @db.Uuid // quién capturó
   createdAt             DateTime     @default(now()) @map("created_at")
   cobradaAt             DateTime?    @map("cobrada_at")
+  // Cancelación (solo desde PENDIENTE): motivo obligatorio + auditoría
+  motivoCancelacion     String?      @map("motivo_cancelacion")
+  canceladaAt           DateTime?    @map("cancelada_at")
+  usuarioCancelaId      String?      @map("usuario_cancela_id") @db.Uuid
 
   sucursal  Sucursal          @relation(fields: [sucursalId], references: [id])
   corte     CorteCaja         @relation(fields: [corteId], references: [id])
@@ -384,6 +389,7 @@ model VentaDetalle {
   parentDetalleId   String?   @map("parent_detalle_id") @db.Uuid // extras cuelgan de su línea
   cantidad          Int       @default(1)
   precioUnitario    Decimal   @map("precio_unitario") @db.Decimal(10, 2) // SNAPSHOT
+  ronda             Int       @default(1) // ESTABLECIMIENTO: pedido N de la mesa; DOMICILIO siempre 1
   notas             String? // "sin lechuga", "sin cebolla"
   activo            Boolean   @default(true) // inactivar requiere PIN
   usuarioInactivoId String?   @map("usuario_inactivo_id") @db.Uuid

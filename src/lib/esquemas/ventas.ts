@@ -114,6 +114,16 @@ export const esquemaCobrarVenta = z.object({
     .optional(),
 });
 
+export const esquemaCancelarVenta = z.object({
+  ventaId: z.uuid(),
+  motivo: z
+    .string()
+    .trim()
+    .min(5, "Describe el motivo de la cancelación (mínimo 5 caracteres)")
+    .max(300),
+  pin: z.string().regex(/^\d{4}$/, "El PIN son 4 dígitos"),
+});
+
 export const esquemaAsignarRepartidor = z.object({
   ventaId: z.uuid(),
   repartidorId: z.uuid("Selecciona al repartidor"),

@@ -10,6 +10,7 @@ export const ACCIONES = [
   "ventas.agregarLineas",
   "ventas.inactivarLinea",
   "ventas.cobrar",
+  "ventas.cancelar", // pedido no aceptado: pérdida que absorbe la sucursal
   "ventas.asignarRepartidor",
   "ventas.validarTransferencia",
   "ventas.ver",
@@ -49,6 +50,7 @@ const PERMISOS_ENCARGADO: readonly Accion[] = [
   "ventas.agregarLineas",
   "ventas.inactivarLinea",
   "ventas.cobrar",
+  "ventas.cancelar",
   "ventas.asignarRepartidor",
   "ventas.validarTransferencia",
   "ventas.ver",

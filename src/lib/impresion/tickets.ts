@@ -118,7 +118,8 @@ function encabezadoTicket(p: ThermalPrinter, datos: DatosTicket) {
 
 function cuerpoCuenta(p: ThermalPrinter, datos: DatosTicket) {
   const { venta } = datos;
-  const activas = venta.lineas.filter((l) => l.activo);
+  // Lo más reciente primero (las líneas llegan por fecha de ingreso asc)
+  const activas = venta.lineas.filter((l) => l.activo).reverse();
   for (const linea of activas) {
     const importe = Number(linea.precioUnitario) * linea.cantidad;
     p.leftRight(

@@ -190,6 +190,122 @@ test("flujo 4: alitas combinadas de 3 sabores + aderezo extra", async ({
   await expect(page.getByText("Venta cobrada.")).toBeVisible();
 });
 
+test("flujo 5: segunda ronda en mesa con rondas distinguidas", async ({
+  page,
+}) => {
+  await iniciarSesion(page, "Centro");
+  await asegurarCorteAbierto(page);
+
+  // Ronda 1: solo una bebida ($15)
+  await page.goto("/ventas/nueva");
+  await page.locator("#mesa").fill("7");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await agregarProductoWizard(page, "Agua embotellada");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Confirmar venta" }).click();
+  await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
+  await page.waitForURL("**/ventas");
+
+  // El cliente pide más: el botón lleva al wizard en modo agregar
+  await abrirVentaPendiente(page, "Mesa 7");
+  await page.getByRole("link", { name: "Agregar productos" }).click();
+  await page.waitForURL(/\/ventas\/[\w-]+\/agregar$/);
+  await expect(page.getByText(/Ronda 2 de la mesa/)).toBeVisible();
+  // Sin paso Cliente: el wizard arranca directo en Bebidas
+  await expect(page.getByRole("button", { name: /Cliente/ })).toHaveCount(0);
+  await agregarProductoWizard(page, "Agua embotellada");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+
+  // Confirmación: la ronda atendida atenuada y la nueva resaltada
+  await expect(page.getByText("Ronda 1 · atendida")).toBeVisible();
+  await expect(page.getByText("Ronda 2 · nueva")).toBeVisible();
+  await expect(
+    page.getByText("Nuevo total de la venta: $30.00")
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Agregar a la venta" }).click();
+  await expect(
+    page.getByText(/Ronda 2 agregada a la venta #\d+\./)
+  ).toBeVisible();
+  await page.waitForURL(/\/ventas\/[\w-]+$/);
+
+  // Detalle agrupado por ronda y total recalculado
+  await expect(page.getByText("Ronda 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ronda 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("$30.00").first()).toBeVisible();
+
+  // Cobrar exacto con Enter (el input tiene el foco al abrir la modal)
+  // y verificar que la operación regresa a la lista de ventas
+  await page.getByRole("button", { name: "Cobrar" }).click();
+  await page.locator("#monto-pagado").fill("30");
+  await expect(page.getByText("Cambio: $0.00")).toBeVisible();
+  await page.locator("#monto-pagado").press("Enter");
+  await expect(page.getByText("Venta cobrada.")).toBeVisible();
+  await page.waitForURL("**/ventas");
+});
+
+test("flujo 6: cancelar venta pendiente con motivo, PIN y egreso en el corte", async ({
+  page,
+}) => {
+  await iniciarSesion(page, "Centro");
+  await asegurarCorteAbierto(page);
+
+  // Venta que el cliente no aceptará ($15)
+  await page.goto("/ventas/nueva");
+  await page.locator("#mesa").fill("8");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await agregarProductoWizard(page, "Agua embotellada");
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Siguiente" }).click();
+  await page.getByRole("button", { name: "Confirmar venta" }).click();
+  await expect(page.getByText(/Venta #\d+ registrada\./)).toBeVisible();
+  await page.waitForURL("**/ventas");
+
+  // Cancelar: motivo obligatorio y PIN incorrecto rechazado
+  await abrirVentaPendiente(page, "Mesa 8");
+  await page.getByRole("button", { name: "Cancelar venta" }).click();
+  const dialogo = page.getByRole("dialog");
+  await dialogo
+    .locator("#motivo-cancelacion")
+    .fill("Cliente no aceptó el pedido por demora");
+  await dialogo.locator("#pin-cancelacion").fill("0000");
+  await dialogo.getByRole("button", { name: "Cancelar venta" }).click();
+  await expect(page.getByText("PIN incorrecto.")).toBeVisible();
+  await dialogo.locator("#pin-cancelacion").fill(ADMIN.pin);
+  await dialogo.getByRole("button", { name: "Cancelar venta" }).click();
+  await expect(page.getByText(/Venta #\d+ cancelada\./)).toBeVisible();
+  await page.waitForURL("**/ventas");
+  await expect(page.getByText("Cancelada").first()).toBeVisible();
+
+  // El detalle conserva la auditoría y ya no ofrece acciones de cobro
+  // (la venta cancelada ya vive en la tabla de historial, no en pendientes)
+  const filaCancelada = page
+    .locator("table")
+    .nth(1)
+    .locator("tbody tr")
+    .filter({ hasText: "Mesa 8" })
+    .filter({ hasText: "Cancelada" })
+    .first();
+  await filaCancelada.getByRole("link").click();
+  await page.waitForURL(/\/ventas\/[\w-]+$/);
+  await expect(
+    page.getByText("Motivo: Cliente no aceptó el pedido por demora")
+  ).toBeVisible();
+  await expect(page.getByText(/Canceló Administrador/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cobrar" })).toHaveCount(0);
+
+  // El corte registra el par neto cero con la pérdida visible como egreso
+  await page.goto("/cortes");
+  await page.getByRole("link", { name: "Ver movimientos" }).click();
+  await expect(
+    page.getByText(/Venta #\d+ \(cancelada\)/).first()
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Cancelación venta #\d+ — Cliente no aceptó/).first()
+  ).toBeVisible();
+});
+
 test("flujo 3: inactivar línea con PIN y verificar auditoría como admin", async ({
   page,
 }) => {

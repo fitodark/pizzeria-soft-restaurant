@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
+import { normalizarCodigo } from "@/lib/codigos";
 import { formatoFecha, formatoMoneda } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -98,7 +100,10 @@ function TablaVentas({ ventas, vacio }: { ventas: VentaFila[]; vacio: string }) 
   );
 }
 
-export default async function PaginaVentas() {
+type Props = { searchParams: Promise<{ buscar?: string }> };
+
+export default async function PaginaVentas({ searchParams }: Props) {
+  const { buscar } = await searchParams;
   const sesion = await getSesion();
   if (
     !tienePermiso(sesion.rol, "ventas.ver") &&
@@ -114,6 +119,23 @@ export default async function PaginaVentas() {
     sucursalId: sesion.sucursalId,
     ...(soloAsignadas ? { repartidorId: sesion.usuario.id } : {}),
   };
+
+  // Aclaraciones: el cliente dicta su código (7QK-4FM) o el folio del ticket
+  const termino = normalizarCodigo(buscar ?? "");
+  const resultado = termino
+    ? await db.venta.findMany({
+        where: {
+          ...filtroBase,
+          OR: [
+            { codigo: termino },
+            ...(/^\d+$/.test(termino) ? [{ folio: Number(termino) }] : []),
+          ],
+        },
+        include: { cliente: { select: { nombre: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      })
+    : null;
 
   const [pendientes, historial] = await Promise.all([
     db.venta.findMany({
@@ -148,6 +170,38 @@ export default async function PaginaVentas() {
           </Button>
         ) : null}
       </div>
+
+      <form action="/ventas" className="flex max-w-md gap-2">
+        <Input
+          name="buscar"
+          className="h-11"
+          placeholder="Código de aclaración o folio (7QK-4FM, 16…)"
+          defaultValue={buscar ?? ""}
+          autoComplete="off"
+        />
+        <Button type="submit" variant="outline" className="h-11">
+          <Search className="size-4" />
+          Buscar
+        </Button>
+      </form>
+
+      {resultado ? (
+        <section className="space-y-2">
+          <h2 className="font-semibold">
+            Resultado de la búsqueda{" "}
+            <span className="text-muted-foreground tabular-nums">
+              ({resultado.length})
+            </span>{" "}
+            <Link href="/ventas" className="text-sm font-normal text-primary hover:underline">
+              Limpiar
+            </Link>
+          </h2>
+          <TablaVentas
+            ventas={resultado}
+            vacio="Ninguna venta coincide con ese código o folio."
+          />
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <h2 className="font-semibold">

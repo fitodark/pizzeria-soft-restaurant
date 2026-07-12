@@ -26,3 +26,10 @@ export function formatoFecha(fecha: Date | string): string {
     typeof fecha === "string" ? new Date(fecha) : fecha
   );
 }
+
+/** Código de aclaración legible: "7QK4FM" → "7QK-4FM". */
+export function formatoCodigo(codigo: string): string {
+  return codigo.length === 6
+    ? `${codigo.slice(0, 3)}-${codigo.slice(3)}`
+    : codigo;
+}

@@ -352,6 +352,10 @@ model CompraDetalle {
 model Venta {
   id                    String       @id @default(uuid()) @db.Uuid
   folio                 Int // consecutivo por sucursal
+  // Código de aclaración para el cliente: 6 caracteres aleatorios de
+  // alfabeto sin ambigüedades, único GLOBAL (se dicta por teléfono).
+  // Nullable solo por las ventas previas a la columna.
+  codigo                String?      @unique
   sucursalId            String       @map("sucursal_id") @db.Uuid
   corteId               String       @map("corte_id") @db.Uuid
   canal                 CanalVenta

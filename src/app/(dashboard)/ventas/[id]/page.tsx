@@ -7,7 +7,7 @@ import {
   repartidoresDeSucursal,
   ventaConDetalles,
 } from "@/lib/consultas/ventas";
-import { formatoFecha, formatoMoneda } from "@/lib/utils";
+import { formatoCodigo, formatoFecha, formatoMoneda } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,6 +84,9 @@ export default async function PaginaDetalleVenta({ params }: Props) {
             <p className="text-muted-foreground">
               {venta.canal === "DOMICILIO" ? "Domicilio" : "Establecimiento"} ·{" "}
               {formatoFecha(venta.createdAt)} · Capturó {venta.capturadaPor}
+              {venta.codigo
+                ? ` · Código ${formatoCodigo(venta.codigo)}`
+                : ""}
             </p>
           </div>
         </div>

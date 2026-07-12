@@ -6,6 +6,7 @@ import { getSesion } from "@/lib/auth";
 import { verificarPermiso } from "@/lib/permisos";
 import { corteAbierto } from "@/lib/consultas/cortes";
 import { esDiaFestivo } from "@/lib/consultas/festivos";
+import { generarCodigoVenta } from "@/lib/codigos";
 import { siguienteFolio } from "@/lib/folios";
 import {
   aplanarLineas,
@@ -191,9 +192,16 @@ export async function crearVenta(datos: unknown): Promise<ResultadoVenta> {
 
   const creada = await db.$transaction(async (tx) => {
     const folio = await siguienteFolio(tx, sesion.sucursalId);
+    // Código de aclaración: colisión prácticamente imposible (27^6), pero
+    // se verifica — un P2002 abortaría la transacción completa en Postgres
+    let codigo = generarCodigoVenta();
+    while (await tx.venta.findUnique({ where: { codigo }, select: { id: true } })) {
+      codigo = generarCodigoVenta();
+    }
     const nueva = await tx.venta.create({
       data: {
         folio,
+        codigo,
         sucursalId: sesion.sucursalId,
         corteId: corte.id,
         canal: venta.canal,

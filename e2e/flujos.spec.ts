@@ -130,12 +130,28 @@ test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
   await expect(page.getByText(/\+ Queso extra/)).toBeVisible();
   await expect(page.getByText("Nota: sin cebolla")).toBeVisible();
 
+  // Código de aclaración visible en el detalle (se imprime en el ticket)
+  const encabezado = await page
+    .getByText(/Código [A-Z0-9]{3}-[A-Z0-9]{3}/)
+    .textContent();
+  const codigo = encabezado!.match(/Código ([A-Z0-9]{3}-[A-Z0-9]{3})/)![1];
+
   // Cobrar con el pago anticipado → cambio $465
   await page.getByRole("button", { name: "Cobrar" }).click();
   await page.locator("#monto-pagado").fill("700");
   await expect(page.getByText("Cambio: $465.00")).toBeVisible();
   await page.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByText("Venta cobrada.")).toBeVisible();
+  await page.waitForURL("**/ventas");
+
+  // Aclaración: el código dictado por el cliente localiza la venta
+  await page.getByPlaceholder(/Código de aclaración/).fill(codigo);
+  await page.getByRole("button", { name: "Buscar" }).click();
+  const seccion = page
+    .locator("section")
+    .filter({ hasText: "Resultado de la búsqueda" });
+  await expect(seccion.getByText("Juan Pérez")).toBeVisible();
+  await expect(seccion.getByText("Cobrada")).toBeVisible();
 });
 
 test("flujo 4: alitas combinadas de 3 sabores + aderezo extra", async ({

@@ -202,6 +202,8 @@ export type LineaVentaDTO = {
 export type VentaDTO = {
   id: string;
   folio: number;
+  /** Código de aclaración (null solo en ventas previas a la columna). */
+  codigo: string | null;
   canal: CanalVenta;
   estatus: EstatusVenta;
   mesa: string | null;
@@ -346,6 +348,7 @@ export async function ventaConDetalles(
   return {
     id: venta.id,
     folio: venta.folio,
+    codigo: venta.codigo,
     canal: venta.canal,
     estatus: venta.estatus,
     mesa: venta.mesa,

@@ -1,6 +1,6 @@
 import type { ThermalPrinter } from "node-thermal-printer";
 import { crearImpresora } from "@/lib/impresion/escpos";
-import { formatoFecha, formatoMoneda } from "@/lib/utils";
+import { formatoCodigo, formatoFecha, formatoMoneda } from "@/lib/utils";
 import type { LineaVentaDTO, VentaDTO } from "@/lib/consultas/ventas";
 
 /**
@@ -102,6 +102,10 @@ function encabezadoTicket(p: ThermalPrinter, datos: DatosTicket) {
   p.newLine();
   p.alignLeft();
   p.leftRight(`Folio #${venta.folio}`, formatoFecha(venta.createdAt));
+  if (venta.codigo) {
+    // El cliente lo dicta en aclaraciones: alfabeto sin caracteres ambiguos
+    p.println(`Codigo de aclaracion: ${formatoCodigo(venta.codigo)}`);
+  }
   if (venta.canal === "DOMICILIO") {
     p.println(
       `Cliente: ${venta.cliente ? `${venta.cliente.nombre} · ${venta.cliente.telefono}` : "—"}`

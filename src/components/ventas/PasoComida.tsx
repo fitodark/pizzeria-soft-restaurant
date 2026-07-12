@@ -8,6 +8,8 @@ import { PizzaPersonalizadaDialog } from "@/components/ventas/PizzaPersonalizada
 import { Promo2x1Dialog } from "@/components/ventas/Promo2x1Dialog";
 import { TarjetaProducto } from "@/components/ventas/TarjetaProducto";
 import { aCents, formatoCents } from "@/components/ventas/carrito";
+import { estiloCategoria } from "@/components/ventas/familiasCategorias";
+import { cn } from "@/lib/utils";
 import type {
   ProductoWizard,
   PromoWizard,
@@ -124,22 +126,30 @@ export function PasoComida({
           )}
         </div>
       )}
-      {categorias.map((categoria) => (
-        <div key={categoria} className="space-y-2">
-          <h3 className="font-semibold capitalize">{categoria}</h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {comidas
-              .filter((c) => c.categoria === categoria)
-              .map((comida) => (
-                <TarjetaProducto
-                  key={comida.id}
-                  producto={comida}
-                  onAgregar={onAgregarProducto}
-                />
-              ))}
-          </div>
-        </div>
-      ))}
+      {categorias.map((categoria) => {
+        const estilo = estiloCategoria(categoria);
+        return (
+          <section
+            key={categoria}
+            className={cn("space-y-3 rounded-xl border p-4", estilo.contenedor)}
+          >
+            <h3 className={cn("font-semibold capitalize", estilo.titulo)}>
+              {categoria}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {comidas
+                .filter((c) => c.categoria === categoria)
+                .map((comida) => (
+                  <TarjetaProducto
+                    key={comida.id}
+                    producto={comida}
+                    onAgregar={onAgregarProducto}
+                  />
+                ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

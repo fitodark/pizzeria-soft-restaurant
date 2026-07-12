@@ -77,11 +77,15 @@ test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
   await iniciarSesion(page, "Centro");
   await asegurarCorteAbierto(page);
 
-  // Paso 1: cliente por teléfono
+  // Paso 1: typeahead por fragmento de teléfono, selección con teclado
   await page.goto("/ventas/nueva");
   await page.getByText("Domicilio", { exact: true }).click();
-  await page.locator("#telefono-cliente").fill("3311122233");
-  await page.getByRole("button", { name: "Buscar" }).click();
+  await page.locator("#telefono-cliente").fill("3311122");
+  await expect(
+    page.getByRole("option", { name: /3311122233 — Juan Pérez/ })
+  ).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await expect(page.getByText("Juan Pérez")).toBeVisible();
 
   // Paso 3: pizza personalizada mezclando categorías (ambas $210 en grande);
@@ -228,9 +232,11 @@ test("flujo 5: segunda ronda en mesa con rondas distinguidas", async ({
   await expect(
     page.getByText(/Ronda 2 agregada a la venta #\d+\./)
   ).toBeVisible();
-  await page.waitForURL(/\/ventas\/[\w-]+$/);
+  // Al confirmar la ronda se regresa al listado (como el cobro)
+  await page.waitForURL("**/ventas");
 
   // Detalle agrupado por ronda y total recalculado
+  await abrirVentaPendiente(page, "Mesa 7");
   await expect(page.getByText("Ronda 1", { exact: true })).toBeVisible();
   await expect(page.getByText("Ronda 2", { exact: true })).toBeVisible();
   await expect(page.getByText("$30.00").first()).toBeVisible();

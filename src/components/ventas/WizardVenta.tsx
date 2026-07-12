@@ -277,7 +277,8 @@ export function WizardVenta({ catalogo, modoAgregar }: Props) {
             "comandas"
           );
         }
-        router.push(`/ventas/${agregado.ventaId}`);
+        // De regreso al listado (como el cobro): ahí siguen las pendientes
+        router.push("/ventas");
       } else {
         toast.error(resultado.error);
       }

@@ -1,9 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 
+// Sobreescribibles por .env (E2E_ADMIN_*) para correr contra una BD cuyo
+// admin ya fue rotado; los valores por defecto son los del entorno de dev.
 export const ADMIN = {
-  email: "admin@pizzeriabarbosa.mx",
-  password: "Barbosa2026!",
-  pin: "1234",
+  email: process.env.E2E_ADMIN_EMAIL ?? "admin@pizzeriabarbosa.mx",
+  password: process.env.E2E_ADMIN_PASSWORD ?? "Barbosa2026!",
+  pin: process.env.E2E_ADMIN_PIN ?? "1234",
 };
 
 /** Login y selección de sucursal (por nombre parcial: "Centro", "Norte"). */

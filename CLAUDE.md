@@ -62,6 +62,7 @@ Server Components consultan Prisma directo (sin caché — el POS necesita datos
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave pública (solo auth) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin API — solo servidor |
+| `SEED_ADMIN_EMAIL/PASSWORD/PIN` | Credenciales del admin inicial — obligatorias para `pnpm db:seed`; rotar con `scripts/rotar-credenciales.ts` |
 
 ## Reglas No Negociables
 

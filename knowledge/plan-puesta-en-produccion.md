@@ -36,10 +36,10 @@ QA libera ──► ETAPA A: go-live con Supabase ──► operación normal
 
 1. **Visto bueno de QA** de todos los módulos.
 2. **Rotar credenciales del seed** (pendiente conocido):
-   - Cambiar contraseña y PIN del admin (`admin@pizzeriabarbosa.mx`).
+   - Cambiar contraseña y PIN del admin (`admin@pizzeriabarbosa.mx`) con `pnpm tsx scripts/rotar-credenciales.ts --email <correo> --generar --pin <nuevo>` (o desde `/usuarios`). El seed ya no trae credenciales fijas: exige `SEED_ADMIN_EMAIL/PASSWORD/PIN` en `.env`.
    - Crear los usuarios reales (encargados, meseros, repartidores) con emails reales y PINes propios en `/usuarios`.
    - Inactivar los usuarios demo (`maria@…`, `pedro@…`) — inactivación, no borrado, como todo en el sistema.
-3. **Limpieza de datos de prueba**: las ventas, cortes y movimientos generados por QA y por la suite E2E deben quedar fuera de producción. Opciones:
+3. **Limpieza de datos de prueba** (solo si producción REUTILIZA la BD de desarrollo; con proyecto separado el punto A.1-bis lo vuelve innecesario): las ventas, cortes y movimientos generados por QA y por la suite E2E deben quedar fuera de producción. Opciones:
    - Re-ejecutar `scripts/cargar-menu.ts` en la ventana de go-live (recarga el menú y **borra todo lo operativo**: ventas, cortes, inventario, clientes de prueba). ⚠️ Solo en la ventana, nunca con operación en curso.
    - Conservar clientes reales capturados durante pruebas, si los hubiera, dándolos de alta de nuevo.
 4. **Catálogo y configuración de negocio**:
@@ -52,6 +52,19 @@ QA libera ──► ETAPA A: go-live con Supabase ──► operación normal
    - `DATABASE_URL` → pooler Supabase puerto 6543.
    - `DIRECT_URL` → conexión directa 5432 (solo migraciones).
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (esta última jamás sale del servidor).
+   - `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (≥ 10 caracteres) y `SEED_ADMIN_PIN` (4 dígitos) — **solo se usan si la BD es nueva** (ver A.1-bis); el seed falla sin ellas. Después del bootstrap pueden quitarse del `.env`: el login valida contra la BD, no contra estas variables.
+
+### A.1-bis Bootstrap de una BD de producción nueva (una sola vez, no por sucursal)
+
+Aplica si producción usa un **proyecto Supabase separado** del de desarrollo (recomendado). Se ejecuta desde una sola máquina con el `.env` de producción:
+
+```powershell
+pnpm prisma migrate deploy      # crea el esquema schema_barbosa_v2 completo
+pnpm db:seed                    # admin real (con las SEED_ADMIN_*) + catálogo demo
+pnpm tsx scripts/cargar-menu.ts # reemplaza el demo por el menú real (164 productos)
+```
+
+Después, desde la app con el admin recién creado: alta de sucursales reales, usuarios reales por rol, impresoras y festivos (resto del checklist A.1). Como las credenciales del admin ya nacieron con los valores definitivos del `.env`, **no hace falta rotarlas**; la rotación (`scripts/rotar-credenciales.ts` o `/usuarios`) queda para cuando se reutilice la BD de desarrollo o para rotaciones periódicas futuras.
 6. **Seguridad de red**: el puerto 3000 se abre solo en el firewall de Windows para la LAN (perfil privado); **no** se publica a internet ni se hace port-forwarding. El acceso remoto del administrador es vía la BD/panel de Supabase, no vía el POS.
 7. **Respaldo en esta etapa**: la BD vive en Supabase (respaldos automáticos según el plan contratado — verificar retención del plan actual). Opcional: `pg_dump --schema=schema_barbosa_v2` semanal a disco local como red de seguridad, con los binarios de PostgreSQL 17.
 

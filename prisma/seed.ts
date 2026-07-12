@@ -7,9 +7,29 @@ import { PrismaClient } from "../src/generated/prisma/client";
 // Debe coincidir con prisma.config.ts y src/lib/db.ts
 const ESQUEMA_BD = "schema_barbosa_v2";
 
-const ADMIN_EMAIL = "admin@pizzeriabarbosa.mx";
-const ADMIN_PASSWORD = "Barbosa2026!";
-const ADMIN_PIN = "1234";
+// Credenciales del admin inicial SIEMPRE por variables de entorno: sin
+// valores por defecto para no sembrar credenciales conocidas en producción.
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "";
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "";
+const ADMIN_PIN = process.env.SEED_ADMIN_PIN ?? "";
+
+function validarCredencialesSeed() {
+  const problemas: string[] = [];
+  if (!ADMIN_EMAIL.includes("@")) {
+    problemas.push("SEED_ADMIN_EMAIL (correo válido)");
+  }
+  if (ADMIN_PASSWORD.length < 10) {
+    problemas.push("SEED_ADMIN_PASSWORD (mínimo 10 caracteres)");
+  }
+  if (!/^\d{4}$/.test(ADMIN_PIN)) {
+    problemas.push("SEED_ADMIN_PIN (4 dígitos)");
+  }
+  if (problemas.length > 0) {
+    throw new Error(
+      `Credenciales del seed ausentes o inválidas en .env: ${problemas.join(", ")}`
+    );
+  }
+}
 
 const adapter = new PrismaPg(
   { connectionString: process.env.DIRECT_URL },
@@ -59,6 +79,7 @@ async function main() {
     console.log("La base de datos ya tiene datos; seed omitido.");
     return;
   }
+  validarCredencialesSeed();
 
   console.log("Sembrando base de datos…");
 
@@ -274,7 +295,7 @@ async function main() {
   console.log("  Promoción '2x1 Martes de Pizza' creada.");
 
   console.log("\nSeed completado ✔");
-  console.log(`  Acceso admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD} (PIN ${ADMIN_PIN})`);
+  console.log(`  Acceso admin: ${ADMIN_EMAIL} (contraseña y PIN: los de tu .env)`);
 }
 
 main()

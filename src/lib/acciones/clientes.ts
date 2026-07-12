@@ -149,6 +149,37 @@ function aClienteVenta(cliente: {
   };
 }
 
+type ResultadoSugerencias =
+  | { ok: true; clientes: ClienteVenta[] }
+  | { ok: false; error: string };
+
+/** Typeahead del paso 1: coincidencias por fragmento de teléfono (≥ 4
+ *  dígitos), con direcciones activas para elegir al seleccionar. */
+export async function sugerirClientesVenta(
+  parcial: unknown
+): Promise<ResultadoSugerencias> {
+  const sesion = await getSesion();
+  verificarPermiso(sesion.rol, "clientes.ver");
+
+  const parseo = z
+    .string()
+    .regex(/^\d{4,15}$/, "Teclea al menos 4 dígitos")
+    .safeParse(parcial);
+  if (!parseo.success) {
+    return { ok: false, error: parseo.error.issues[0]?.message ?? "Teléfono inválido" };
+  }
+
+  const clientes = await db.cliente.findMany({
+    where: { telefono: { contains: parseo.data } },
+    include: {
+      direcciones: { where: { activa: true }, orderBy: { direccion: "asc" } },
+    },
+    orderBy: { telefono: "asc" },
+    take: 8,
+  });
+  return { ok: true, clientes: clientes.map(aClienteVenta) };
+}
+
 /** Busca al cliente por teléfono con sus direcciones activas. */
 export async function buscarClienteVenta(
   telefono: unknown

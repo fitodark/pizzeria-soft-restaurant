@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Home, Search, Store, X } from "lucide-react";
+import { Home, Store, X } from "lucide-react";
 import { toast } from "sonner";
-import { buscarClienteVenta, type ClienteVenta } from "@/lib/acciones/clientes";
-import { ClienteVentaDialog } from "@/components/ventas/ClienteVentaDialog";
+import type { ClienteVenta } from "@/lib/acciones/clientes";
+import { BuscadorClienteTelefono } from "@/components/ventas/BuscadorClienteTelefono";
 import { DireccionVentaDialog } from "@/components/ventas/DireccionVentaDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,30 +34,9 @@ export function PasoCliente({
   direccionId,
   onDireccion,
 }: Props) {
-  const [telefono, setTelefono] = useState("");
-  const [sinResultado, setSinResultado] = useState(false);
-  const [buscando, startTransition] = useTransition();
-
-  const buscar = () => {
-    startTransition(async () => {
-      setSinResultado(false);
-      const resultado = await buscarClienteVenta(telefono);
-      if (!resultado.ok) {
-        toast.error(resultado.error);
-        return;
-      }
-      if (resultado.cliente) {
-        seleccionarCliente(resultado.cliente);
-      } else {
-        setSinResultado(true);
-      }
-    });
-  };
-
   const seleccionarCliente = (encontrado: ClienteVenta) => {
     onCliente(encontrado);
     onDireccion(encontrado.direcciones[0]?.id ?? "");
-    setSinResultado(false);
     if (encontrado.direcciones.length === 0) {
       toast.info('El cliente no tiene direcciones activas; regístrale una con "Nueva dirección".');
     }
@@ -178,39 +156,7 @@ export function PasoCliente({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <Label htmlFor="telefono-cliente">Teléfono del cliente</Label>
-          <div className="flex max-w-md gap-2">
-            <Input
-              id="telefono-cliente"
-              className="h-11"
-              inputMode="tel"
-              placeholder="3311122233"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && buscar()}
-            />
-            <Button
-              className="h-11"
-              onClick={buscar}
-              disabled={buscando || telefono.trim().length < 7}
-            >
-              <Search className="size-4" />
-              {buscando ? "Buscando…" : "Buscar"}
-            </Button>
-          </div>
-          {sinResultado ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed p-4">
-              <p className="text-muted-foreground">
-                No hay cliente con ese teléfono.
-              </p>
-              <ClienteVentaDialog
-                telefonoInicial={telefono}
-                onCreado={seleccionarCliente}
-              />
-            </div>
-          ) : null}
-        </div>
+        <BuscadorClienteTelefono onSeleccion={seleccionarCliente} />
       )}
     </div>
   );

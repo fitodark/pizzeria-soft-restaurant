@@ -48,7 +48,26 @@ export async function iniciarSesion(
     return { error: "Sin sucursal asignada, contacta al administrador." };
   }
 
+  // Una sola sucursal disponible: entrar directo, sin preguntar
+  const disponibles = await sucursalesDisponibles(perfil);
+  if (disponibles.length === 1) {
+    await activarSucursal(disponibles[0].id);
+    redirect("/");
+  }
   redirect("/seleccionar-sucursal");
+}
+
+/** Fija la sucursal activa del turno en la cookie que valida getSesion. */
+async function activarSucursal(sucursalId: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE_SUCURSAL, sucursalId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    // El POS corre en la LAN por http (sin TLS); secure bloquearía la cookie.
+    secure: false,
+    maxAge: 60 * 60 * 24, // el turno se elige al menos una vez al día
+  });
 }
 
 const esquemaSucursal = z.object({
@@ -70,16 +89,7 @@ export async function seleccionarSucursal(formData: FormData): Promise<void> {
     redirect("/seleccionar-sucursal");
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_SUCURSAL, datos.data.sucursalId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    // El POS corre en la LAN por http (sin TLS); secure bloquearía la cookie.
-    secure: false,
-    maxAge: 60 * 60 * 24, // el turno se elige al menos una vez al día
-  });
-
+  await activarSucursal(datos.data.sucursalId);
   redirect("/");
 }
 

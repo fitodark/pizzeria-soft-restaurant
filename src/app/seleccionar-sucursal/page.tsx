@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getPerfilAutenticado, sucursalesDisponibles } from "@/lib/auth";
 import { cerrarSesion, seleccionarSucursal } from "@/lib/acciones/auth";
+import { SeleccionAutomatica } from "@/components/auth/SeleccionAutomatica";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +35,11 @@ export default async function PaginaSeleccionarSucursal() {
             <p className="text-center text-muted-foreground">
               Sin sucursal asignada, contacta al administrador.
             </p>
+          ) : sucursales.length === 1 ? (
+            <SeleccionAutomatica
+              sucursalId={sucursales[0].id}
+              nombre={sucursales[0].nombre}
+            />
           ) : (
             <form action={seleccionarSucursal} className="space-y-2">
               {sucursales.map((sucursal) => (

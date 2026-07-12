@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import { cobrarVenta } from "@/lib/acciones/ventas";
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function CobrarDialog({ ventaId, total, metodoPago }: Props) {
+  const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [monto, setMonto] = useState("");
   const [pendiente, startTransition] = useTransition();
@@ -38,7 +40,10 @@ export function CobrarDialog({ ventaId, total, metodoPago }: Props) {
       ? montoNum - totalNum
       : null;
 
-  const cobrar = () => {
+  // Enter en el input dispara el submit; el guard evita un doble cobro
+  const cobrar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pendiente || (esEfectivo && cambio === null)) return;
     startTransition(async () => {
       const resultado = await cobrarVenta({
         ventaId,
@@ -51,6 +56,8 @@ export function CobrarDialog({ ventaId, total, metodoPago }: Props) {
         }
         setAbierto(false);
         setMonto("");
+        // De regreso a la lista: quedan más cuentas por cobrar
+        router.push("/ventas");
       } else {
         toast.error(resultado.error);
       }
@@ -74,7 +81,7 @@ export function CobrarDialog({ ventaId, total, metodoPago }: Props) {
               : "El pago por transferencia queda pendiente de validar."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={cobrar}>
           <p className="text-center">
             <span className="text-sm text-muted-foreground">Total</span>
             <span className="block text-3xl font-semibold tabular-nums">
@@ -101,13 +108,13 @@ export function CobrarDialog({ ventaId, total, metodoPago }: Props) {
             </div>
           ) : null}
           <Button
+            type="submit"
             className="h-11 w-full"
-            onClick={cobrar}
             disabled={pendiente || (esEfectivo && cambio === null)}
           >
             {pendiente ? "Cobrando…" : "Confirmar cobro"}
           </Button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

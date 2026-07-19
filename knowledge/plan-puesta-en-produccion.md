@@ -141,6 +141,40 @@ Cuando se desarrolle (1½–2 días, ver `plan-local-first.md`):
 - [ ] Emails reales de los usuarios.
 - [ ] Frecuencia de sync (propuesta 5 min) y umbral de alerta offline (propuesta 2 h).
 
+## 7. Pruebas desde la carga inicial (reinicio para QA)
+
+Para arrancar un **escenario de pruebas desde cero** — alta de clientes desde cero,
+cortes de caja desde cero, folios desde 1 — sin perder la carga inicial operativa:
+
+```powershell
+pnpm tsx scripts/reiniciar-pruebas.ts --confirmar
+```
+
+| Queda EN CERO | Se CONSERVA |
+|---|---|
+| Ventas (detalles y mitades) | Menú completo: 164 productos / 438 variantes / 12 promociones |
+| Cortes de caja y sus movimientos | Sucursales, configuración e impresoras |
+| Compras a proveedor | Usuarios, roles y PINes (y sus sesiones: nadie sale del sistema) |
+| Movimientos de inventario | Días festivos |
+| **Clientes y direcciones** | Inventario: existencia inicial 24 con AJUSTE "Carga inicial" auditado |
+| Folios (regresan a 1 por sucursal) | |
+
+Opciones:
+- `--existencia <n>` — existencia inicial de inventario distinta de 24.
+- `--clientes-demo` — recrea a Juan Pérez y Ana Prueba (los asume la suite E2E de
+  desarrollo; QA normalmente no lo necesita). ⚠️ Mientras QA y desarrollo compartan
+  BD, un reinicio sin este flag deja a la suite E2E sin sus clientes de prueba.
+
+Reglas:
+1. Sin `--confirmar` no borra nada: solo imprime la advertencia.
+2. Afecta **todas** las sucursales de la BD apuntada por `DIRECT_URL` — jamás
+   ejecutarlo con operación real en curso; en producción no tiene lugar salvo en la
+   ventana previa al go-live (equivale a la "limpieza de datos de prueba" del punto
+   2.3, con la diferencia de que `cargar-menu.ts` además recarga el menú desde el
+   Excel mientras que `reiniciar-pruebas.ts` lo conserva tal cual está).
+3. Después del reinicio el primer paso operativo es abrir corte de caja, como en un
+   arranque real (punto 4.2 del día de go-live).
+
 ## Pendientes que bloquean el go-live (estado 2026-07-18)
 
 - [ ] Liberación de QA (probando ya contra la versión local-first).

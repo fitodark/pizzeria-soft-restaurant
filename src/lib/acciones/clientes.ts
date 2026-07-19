@@ -153,7 +153,7 @@ type ResultadoSugerencias =
   | { ok: true; clientes: ClienteVenta[] }
   | { ok: false; error: string };
 
-/** Typeahead del paso 1: coincidencias por fragmento de teléfono (≥ 4
+/** Typeahead del paso 1: coincidencias por fragmento de teléfono (≥ 3
  *  dígitos), con direcciones activas para elegir al seleccionar. */
 export async function sugerirClientesVenta(
   parcial: unknown
@@ -163,7 +163,7 @@ export async function sugerirClientesVenta(
 
   const parseo = z
     .string()
-    .regex(/^\d{4,15}$/, "Teclea al menos 4 dígitos")
+    .regex(/^\d{3,15}$/, "Teclea al menos 3 dígitos")
     .safeParse(parcial);
   if (!parseo.success) {
     return { ok: false, error: parseo.error.issues[0]?.message ?? "Teléfono inválido" };

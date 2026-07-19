@@ -19,7 +19,7 @@ type Props = {
 };
 
 /**
- * Búsqueda de cliente por teléfono (paso 1, domicilio): a partir de 4
+ * Búsqueda de cliente por teléfono (paso 1, domicilio): a partir de 3
  * dígitos se sugieren coincidencias ("teléfono — nombre") navegables con
  * ↑/↓ y seleccionables con Enter. El botón "Buscar" conserva la búsqueda
  * exacta y, sin coincidencia, ofrece el alta rápida.
@@ -37,7 +37,7 @@ export function BuscadorClienteTelefono({ onSeleccion }: Props) {
   const digitos = telefono.replace(/\D/g, "");
 
   useEffect(() => {
-    if (digitos.length < 4) {
+    if (digitos.length < 3) {
       // La limpieza de sugerencias ocurre en onChange; aquí solo se evita buscar
       return;
     }
@@ -124,7 +124,7 @@ export function BuscadorClienteTelefono({ onSeleccion }: Props) {
             onChange={(e) => {
               setTelefono(e.target.value);
               setSinResultado(false);
-              if (e.target.value.replace(/\D/g, "").length < 4) {
+              if (e.target.value.replace(/\D/g, "").length < 3) {
                 consulta.current += 1; // invalida búsquedas en vuelo
                 setSugerencias([]);
                 setAbierto(false);

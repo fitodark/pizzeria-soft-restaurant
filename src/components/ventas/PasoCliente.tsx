@@ -34,9 +34,13 @@ export function PasoCliente({
   direccionId,
   onDireccion,
 }: Props) {
+  // Regla QA: con una sola dirección se preselecciona; con varias, ninguna
+  // hasta que el cajero confirme con el cliente a cuál se envía el pedido.
   const seleccionarCliente = (encontrado: ClienteVenta) => {
     onCliente(encontrado);
-    onDireccion(encontrado.direcciones[0]?.id ?? "");
+    onDireccion(
+      encontrado.direcciones.length === 1 ? encontrado.direcciones[0].id : ""
+    );
     if (encontrado.direcciones.length === 0) {
       toast.info('El cliente no tiene direcciones activas; regístrale una con "Nueva dirección".');
     }

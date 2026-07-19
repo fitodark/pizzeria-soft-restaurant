@@ -88,6 +88,9 @@ test("flujo 2: venta domicilio con pizza personalizada + extra", async ({
   await page.keyboard.press("Enter");
   await expect(page.getByText("Juan Pérez")).toBeVisible();
 
+  // Con varias direcciones ninguna queda preseleccionada: hay que elegir una
+  await page.getByRole("button", { name: /Av\. Vallarta 205/ }).click();
+
   // Paso 3: pizza personalizada mezclando categorías (ambas $210 en grande);
   // los paquetes reales son solo sucursal, así que a domicilio no aparecen
   await page.getByRole("button", { name: "Siguiente" }).click();

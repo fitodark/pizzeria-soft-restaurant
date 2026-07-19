@@ -1,14 +1,14 @@
 import "dotenv/config";
 import { randomBytes } from "node:crypto";
-import { createClient } from "@supabase/supabase-js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 /**
- * Rota la contraseña (Supabase Auth) y/o el PIN (Perfil) de un usuario
- * existente. Pensado para el checklist de go-live (plan de puesta en
- * producción, A.1): rotar las credenciales del seed sin entrar a la UI.
+ * Rota la contraseña y/o el PIN de un usuario (auth propia, todo en Perfil).
+ * Pensado para el checklist de go-live (plan de puesta en producción, A.1):
+ * rotar las credenciales del seed sin entrar a la UI. Revoca las sesiones
+ * activas del usuario al cambiar la contraseña.
  *
  *   pnpm tsx scripts/rotar-credenciales.ts --email admin@... --password "NuevaSegura123" --pin 9876
  *   pnpm tsx scripts/rotar-credenciales.ts --email admin@... --generar          # contraseña aleatoria
@@ -59,14 +59,6 @@ async function main() {
     uso("el PIN son exactamente 4 dígitos.");
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRole) {
-    uso("faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env.");
-  }
-  const supabase = createClient(url, serviceRole, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
   const adapter = new PrismaPg(
     { connectionString: process.env.DIRECT_URL },
     { schema: ESQUEMA_BD }
@@ -74,45 +66,40 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    // Localizar al usuario en Auth por correo
-    const { data: lista, error: errorLista } =
-      await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (errorLista) {
-      throw new Error(`No se pudo listar usuarios de Auth: ${errorLista.message}`);
-    }
-    const usuario = lista.users.find((u) => u.email === email);
-    if (!usuario) {
-      throw new Error(`No existe un usuario en Auth con el correo ${email}.`);
-    }
     const perfil = await prisma.perfil.findUnique({
-      where: { id: usuario.id },
-      select: { nombre: true, rol: true, activo: true },
+      where: { email: email.toLowerCase() },
+      select: { id: true, nombre: true, rol: true },
     });
     if (!perfil) {
-      throw new Error(`El usuario existe en Auth pero no tiene perfil en la BD.`);
+      throw new Error(`No existe un usuario con el correo ${email}.`);
     }
 
     console.log(`Rotando credenciales de ${perfil.nombre} (${perfil.rol}) — ${email}`);
 
-    if (password) {
-      const { error } = await supabase.auth.admin.updateUserById(usuario.id, {
-        password,
+    await prisma.$transaction(async (tx) => {
+      await tx.perfil.update({
+        where: { id: perfil.id },
+        data: {
+          ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+          ...(pin ? { pinHash: await bcrypt.hash(pin, 10) } : {}),
+        },
       });
-      if (error) {
-        throw new Error(`No se pudo cambiar la contraseña: ${error.message}`);
+      if (password) {
+        await tx.sesion.updateMany({
+          where: { usuarioId: perfil.id, revocadaAt: null },
+          data: { revocadaAt: new Date() },
+        });
       }
-      console.log("  Contraseña actualizada en Auth.");
+    });
+
+    if (password) {
+      console.log("  Contraseña actualizada; sesiones activas revocadas.");
       if (generar) {
         console.log(`  ⚠️  Contraseña generada (guárdala AHORA, no se vuelve a mostrar):`);
         console.log(`      ${password}`);
       }
     }
-
     if (pin) {
-      await prisma.perfil.update({
-        where: { id: usuario.id },
-        data: { pinHash: await bcrypt.hash(pin, 10) },
-      });
       console.log("  PIN actualizado en el perfil.");
     }
 

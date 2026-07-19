@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { createClient } from "@supabase/supabase-js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -37,42 +36,6 @@ const adapter = new PrismaPg(
 );
 const prisma = new PrismaClient({ adapter });
 
-async function crearAdminEnSupabase(): Promise<string> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRole) {
-    throw new Error(
-      "Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en .env"
-    );
-  }
-  const supabase = createClient(url, serviceRole, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  // Idempotente: si el admin ya existe en Auth, reutilizar su id.
-  const { data: lista, error: errorLista } =
-    await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (errorLista) {
-    throw new Error(`No se pudo listar usuarios de Auth: ${errorLista.message}`);
-  }
-  const existente = lista.users.find((u) => u.email === ADMIN_EMAIL);
-  if (existente) {
-    console.log(`  Auth: el usuario ${ADMIN_EMAIL} ya existe, reutilizando.`);
-    return existente.id;
-  }
-
-  const { data, error } = await supabase.auth.admin.createUser({
-    email: ADMIN_EMAIL,
-    password: ADMIN_PASSWORD,
-    email_confirm: true,
-  });
-  if (error || !data.user) {
-    throw new Error(`No se pudo crear el admin en Auth: ${error?.message}`);
-  }
-  console.log(`  Auth: usuario ${ADMIN_EMAIL} creado.`);
-  return data.user.id;
-}
-
 async function main() {
   const yaSembrado = await prisma.sucursal.count();
   if (yaSembrado > 0) {
@@ -106,20 +69,21 @@ async function main() {
   });
   console.log(`  Sucursal: ${sucursal.nombre}`);
 
-  // 2. Administrador (Supabase Auth + perfil + asignación de sucursal)
-  const adminId = await crearAdminEnSupabase();
-  await prisma.perfil.upsert({
-    where: { id: adminId },
+  // 2. Administrador (auth propia: email + hash directo en el perfil)
+  const admin = await prisma.perfil.upsert({
+    where: { email: ADMIN_EMAIL.toLowerCase() },
     update: {},
     create: {
-      id: adminId,
       nombre: "Administrador",
       rol: "ADMINISTRADOR",
       sueldo: "0",
+      email: ADMIN_EMAIL.toLowerCase(),
+      passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10),
       pinHash: await bcrypt.hash(ADMIN_PIN, 10),
       sucursales: { create: { sucursalId: sucursal.id } },
     },
   });
+  const adminId = admin.id;
   console.log("  Perfil de administrador creado.");
 
   // 3. Especialidades de pizza (elegibles como mitad) con 3 tamaños

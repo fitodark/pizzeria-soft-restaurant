@@ -1,6 +1,6 @@
 # Pizzería Barbosa — POS
 
-Sistema POS web multi-sucursal para pizzería: ventas en establecimiento y a domicilio, inventario, promociones, cortes de caja con auditoría e impresión de tickets térmicos ESC/POS. Servidor Next.js local por sucursal + Supabase (PostgreSQL en línea) compartida. Todo en español: UI, mensajes, dominio.
+Sistema POS web multi-sucursal para pizzería: ventas en establecimiento y a domicilio, inventario, promociones, cortes de caja con auditoría e impresión de tickets térmicos ESC/POS. Servidor Next.js local por sucursal + **PostgreSQL local** (local-first; Supabase queda como nube consolidada para la Fase 2 de sincronización). Todo en español: UI, mensajes, dominio.
 
 ## Comandos
 
@@ -14,7 +14,7 @@ Sistema POS web multi-sucursal para pizzería: ventas en establecimiento y a dom
 
 ## Stack
 
-Next.js 16 (App Router) + TypeScript strict + Tailwind v4 + shadcn/ui + Supabase (Postgres + Auth) + Prisma + node-thermal-printer (ESC/POS TCP:9100) + Vitest/Playwright
+Next.js 16 (App Router) + TypeScript strict + Tailwind v4 + shadcn/ui + PostgreSQL local (18, puerto 5433) + Prisma + auth propia (bcrypt + tabla `sesiones`) + node-thermal-printer (ESC/POS TCP:9100) + Vitest/Playwright
 
 ## Arquitectura
 
@@ -30,13 +30,13 @@ Next.js 16 (App Router) + TypeScript strict + Tailwind v4 + shadcn/ui + Supabase
 Server Components consultan Prisma directo (sin caché — el POS necesita datos frescos). Mutaciones vía server actions: validar Zod → `getSesion()` → `verificarPermiso()` → transacción Prisma → `revalidatePath()`. El cliente NUNCA envía precios; el servidor los calcula desde `producto_variantes`.
 
 ### Patrones clave
-- Sesión: Supabase Auth (cookies httpOnly vía @supabase/ssr); sucursal activa en cookie `sucursal_activa`; `getSesion()` en `lib/auth.ts` devuelve `{ usuario, rol, sucursalId }`
+- Sesión: auth propia — login con `Perfil.email` + `password_hash` (bcrypt), token aleatorio en cookie httpOnly `sesion` cuyo sha256 vive en la tabla `sesiones` (12 h deslizantes, revocable); helpers en `lib/sesiones.ts`; sucursal activa en cookie `sucursal_activa`; `getSesion()` en `lib/auth.ts` devuelve `{ usuario, rol, sucursalId }`
 - Auditoría: nada se borra físicamente — bandera `activo` + `usuario_inactivo_id` + `fecha_inactivacion`. Solo ADMINISTRADOR ve inactivos
 - Pizza personalizada: línea `PIZZA_PERSONALIZADA` con 2 mitades (productos `es_especialidad`); precio = mitad más cara en ese tamaño
 - Alitas: sabores = productos categoría `alitas` con órdenes por piezas como variantes (7/10/14/20 pzas, precio fijo por tamaño); combinadas = línea `ALITAS_PERSONALIZADAS` con 2-3 sabores en `venta_detalle_mitades`, límite por `max_sabores` de la variante (7→1, 10→2, 14/20→3)
 - Extras: productos `tipo_articulo = EXTRA`, líneas hijas vía `parent_detalle_id`; quitar ingredientes = nota de texto, no descuenta
 - Un corte ABIERTO por sucursal (índice único parcial en BD)
-- Todas las tablas viven en el esquema `schema_barbosa_v2` de Postgres (no en `public`, que Supabase expone en su Data API). El nombre se declara en `prisma.config.ts` (CLI) y `src/lib/db.ts` (runtime) — deben coincidir
+- Todas las tablas viven en el esquema `schema_barbosa_v2` de Postgres (no en `public`). El nombre se declara en `prisma.config.ts` (CLI) y `src/lib/db.ts` (runtime) — deben coincidir
 - Impresión server-side; si falla, la venta ya está guardada — ofrecer reimpresión
 
 ## Reglas de Código
@@ -57,11 +57,9 @@ Server Components consultan Prisma directo (sin caché — el POS necesita datos
 
 | Variable | Descripción |
 |----------|-------------|
-| `DATABASE_URL` | Postgres Supabase vía pooler (6543) |
-| `DIRECT_URL` | Conexión directa (5432) para migraciones |
-| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Llave pública (solo auth) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Admin API — solo servidor |
+| `DATABASE_URL` | Postgres local de la sucursal (18 en `localhost:5433/barbosa`) |
+| `DIRECT_URL` | Igual que `DATABASE_URL` en local (Prisma la usa para migraciones) |
+| `NUBE_DIRECT_URL` | Postgres del consolidado en la nube — solo el job de sync (Fase 2) y el backfill único |
 | `SEED_ADMIN_EMAIL/PASSWORD/PIN` | Credenciales del admin inicial — obligatorias para `pnpm db:seed`; rotar con `scripts/rotar-credenciales.ts` |
 
 ## Reglas No Negociables
@@ -72,4 +70,4 @@ Server Components consultan Prisma directo (sin caché — el POS necesita datos
 4. Autorización por rol en el servidor (`lib/permisos.ts`) en cada action — la UI solo oculta, nunca protege.
 5. Ventas DOMICILIO exigen cliente + dirección; validar banderas de canal de productos y promos en servidor.
 6. Nunca `window.print()` — impresión solo server-side vía `lib/impresion/`.
-7. No commitear `.env`; `SUPABASE_SERVICE_ROLE_KEY` jamás en código cliente.
+7. No commitear `.env`; las URLs de BD (local y nube) jamás en código cliente.

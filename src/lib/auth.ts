@@ -2,7 +2,12 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { crearClienteSupabaseServer } from "@/lib/supabase/server";
+import {
+  COOKIE_SESION,
+  HORAS_SESION,
+  expiracionSesion,
+  hashearTokenSesion,
+} from "@/lib/sesiones";
 import { Rol } from "@/generated/prisma/enums";
 
 export const COOKIE_SUCURSAL = "sucursal_activa";
@@ -16,25 +21,42 @@ export type Sesion = {
 /**
  * Usuario autenticado con perfil activo, sin exigir sucursal seleccionada.
  * Para /seleccionar-sucursal y las acciones de sesión. Redirige a /login si
- * no hay sesión o el perfil está inactivo.
+ * no hay sesión válida en BD o el perfil está inactivo.
  */
 export const getPerfilAutenticado = cache(async () => {
-  const supabase = await crearClienteSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_SESION)?.value;
+  if (!token) {
     redirect("/login");
   }
 
-  const perfil = await db.perfil.findUnique({
-    where: { id: user.id },
-    include: { sucursales: { include: { sucursal: true } } },
+  const ahora = new Date();
+  const sesionBd = await db.sesion.findUnique({
+    where: { tokenHash: hashearTokenSesion(token) },
+    include: {
+      usuario: { include: { sucursales: { include: { sucursal: true } } } },
+    },
   });
-  if (!perfil || !perfil.activo) {
+  if (
+    !sesionBd ||
+    sesionBd.revocadaAt ||
+    sesionBd.expiraAt <= ahora ||
+    !sesionBd.usuario.activo
+  ) {
     redirect("/login");
   }
-  return perfil;
+
+  // Expiración deslizante: se extiende a 12 h desde el último uso, pero solo
+  // cuando ya se consumió más de una hora (evita un UPDATE por cada request).
+  const msRestantes = sesionBd.expiraAt.getTime() - ahora.getTime();
+  if (msRestantes < (HORAS_SESION - 1) * 60 * 60 * 1000) {
+    await db.sesion.update({
+      where: { id: sesionBd.id },
+      data: { expiraAt: expiracionSesion(ahora) },
+    });
+  }
+
+  return sesionBd.usuario;
 });
 
 /** Sucursales donde el usuario puede laborar (admin: todas las activas). */

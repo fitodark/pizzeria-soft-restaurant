@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
-import { crearClienteSupabaseAdmin } from "@/lib/supabase/admin";
 import { formatoMoneda } from "@/lib/utils";
 import { ETIQUETA_ROL } from "@/components/layout/navegacion";
 import { NuevoUsuario } from "./NuevoUsuario";
@@ -32,18 +31,10 @@ export default async function PaginaUsuarios() {
     }),
   ]);
 
-  // El correo vive solo en Supabase Auth; se cruza por id.
-  const supabaseAdmin = crearClienteSupabaseAdmin();
-  const { data } = await supabaseAdmin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  });
-  const emails = new Map(data?.users.map((u) => [u.id, u.email ?? ""]) ?? []);
-
   const filas: FilaUsuario[] = perfiles.map((p) => ({
     id: p.id,
     nombre: p.nombre,
-    email: emails.get(p.id) ?? "—",
+    email: p.email ?? "—",
     rol: ETIQUETA_ROL[p.rol],
     sueldo: `${formatoMoneda(p.sueldo.toString())} ${ETIQUETA_PERIODO[p.periodoSueldo]}`,
     sucursales:

@@ -4,7 +4,6 @@ import { ArrowLeft } from "lucide-react";
 import { getSesion } from "@/lib/auth";
 import { tienePermiso } from "@/lib/permisos";
 import { db } from "@/lib/db";
-import { crearClienteSupabaseAdmin } from "@/lib/supabase/admin";
 import { FormularioUsuario } from "@/components/forms/FormularioUsuario";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -34,10 +33,6 @@ export default async function PaginaUsuarioDetalle({
     notFound();
   }
 
-  const supabaseAdmin = crearClienteSupabaseAdmin();
-  const { data } = await supabaseAdmin.auth.admin.getUserById(id);
-  const email = data?.user?.email ?? "—";
-
   return (
     <div className="space-y-6">
       <div>
@@ -59,7 +54,7 @@ export default async function PaginaUsuarioDetalle({
             sucursales={sucursales}
             usuario={{
               id: perfil.id,
-              email,
+              email: perfil.email ?? "—",
               nombre: perfil.nombre,
               rol: perfil.rol,
               sueldo: perfil.sueldo.toString(),

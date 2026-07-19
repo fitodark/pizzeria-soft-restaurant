@@ -5,12 +5,18 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { getSesion } from "@/lib/auth";
 import { verificarPermiso } from "@/lib/permisos";
-import { crearClienteSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   esquemaUsuarioEdicion,
   esquemaUsuarioNuevo,
 } from "@/lib/esquemas/usuarios";
+import { Prisma } from "@/generated/prisma/client";
 import type { Resultado } from "@/types";
+
+function esEmailDuplicado(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
+  );
+}
 
 export async function crearUsuario(datos: unknown): Promise<Resultado> {
   const sesion = await getSesion();
@@ -22,27 +28,12 @@ export async function crearUsuario(datos: unknown): Promise<Resultado> {
   }
   const { email, password, pin, sucursalIds, ...perfil } = parseo.data;
 
-  const supabaseAdmin = crearClienteSupabaseAdmin();
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-  if (error || !data.user) {
-    const duplicado = error?.code === "email_exists";
-    return {
-      ok: false,
-      error: duplicado
-        ? "Ya existe un usuario con ese correo."
-        : `No se pudo crear el usuario en Auth: ${error?.message ?? "error desconocido"}`,
-    };
-  }
-
   try {
     await db.perfil.create({
       data: {
-        id: data.user.id,
         ...perfil,
+        email: email.toLowerCase(),
+        passwordHash: await bcrypt.hash(password, 10),
         pinHash: await bcrypt.hash(pin, 10),
         sucursales: {
           create: sucursalIds.map((sucursalId) => ({ sucursalId })),
@@ -50,8 +41,9 @@ export async function crearUsuario(datos: unknown): Promise<Resultado> {
       },
     });
   } catch (e) {
-    // El alta en Auth no es transaccional con la BD: revertir manualmente.
-    await supabaseAdmin.auth.admin.deleteUser(data.user.id);
+    if (esEmailDuplicado(e)) {
+      return { ok: false, error: "Ya existe un usuario con ese correo." };
+    }
     throw e;
   }
 
@@ -86,6 +78,7 @@ export async function actualizarUsuario(
       data: {
         ...perfil,
         ...(pin ? { pinHash: await bcrypt.hash(pin, 10) } : {}),
+        ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
       },
     });
     await tx.usuarioSucursal.deleteMany({ where: { usuarioId: id } });
@@ -94,20 +87,14 @@ export async function actualizarUsuario(
         data: sucursalIds.map((sucursalId) => ({ usuarioId: id, sucursalId })),
       });
     }
-  });
-
-  if (password) {
-    const supabaseAdmin = crearClienteSupabaseAdmin();
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(id, {
-      password,
-    });
-    if (error) {
-      return {
-        ok: false,
-        error: "Perfil guardado, pero no se pudo cambiar la contraseña.",
-      };
+    // Cambio de contraseña o desactivación: sus sesiones vivas dejan de valer
+    if (password || !parseo.data.activo) {
+      await tx.sesion.updateMany({
+        where: { usuarioId: id, revocadaAt: null },
+        data: { revocadaAt: new Date() },
+      });
     }
-  }
+  });
 
   revalidatePath("/usuarios");
   revalidatePath(`/usuarios/${id}`);

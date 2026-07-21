@@ -51,7 +51,7 @@ QA libera ──► go-live local-first por sucursal (matriz primero) ──► 
 ### 2-bis. Bootstrap de una BD nueva (sucursal que nace en cero)
 
 ```powershell
-pnpm prisma migrate deploy      # crea schema_barbosa_v2 completo (11 migraciones, incluye auth propia)
+pnpm prisma migrate deploy      # crea schema_barbosa_v2 completo (12 migraciones, incluye auth propia y soft-delete de festivos)
 pnpm db:seed                    # admin real (SEED_ADMIN_*: email + hash bcrypt local) + catálogo demo
 pnpm tsx scripts/cargar-menu.ts # reemplaza el demo por el menú real (164 productos)
 ```
@@ -97,7 +97,10 @@ pnpm install --frozen-lockfile
 pnpm build
 .\scripts\install-service.ps1        # registra "PizzeriaBarbosa" con NSSM,
                                      # copia estáticos + .env al standalone,
-                                     # inicio automático, logs en \logs
+                                     # logs en \logs.
+                                     # Arranque MANUAL por defecto (ver Anexo A);
+                                     # pasar -InicioAutomatico para que arranque
+                                     # solo con Windows.
 ```
 
 Verificación post-instalación:
@@ -183,3 +186,52 @@ Reglas:
 - [ ] Instalar PostgreSQL 18 (5433) en el servidor de cada sucursal — Infraestructura.
 - [ ] Capturar días festivos y datos reales de sucursales.
 - [x] ~~Desarrollo local-first fases 0–1~~ (2026-07-18: BD local + auth propia, venta sin internet verificada).
+
+## Anexo A: Arranque y apagado manual del servicio (instancia con puerto 3000 compartido)
+
+Cuando el puerto 3000 de una PC se comparte con otra instalación que corre en
+otro horario, `install-service.ps1` registra el servicio en arranque **MANUAL**
+(`SERVICE_DEMAND_START`) por defecto — así un reinicio de Windows no lo hace
+arrancar solo y pelear el puerto con la otra instancia. Cuando esta instancia
+quede fija en un servidor propio (sin compartir puerto), se cambia a arranque
+automático.
+
+### Instalación (arranque manual, valor por defecto)
+```powershell
+.\scripts\install-service.ps1
+```
+
+### Pasar a arranque automático (cuando esta instancia ya no comparta puerto)
+```powershell
+nssm set PizzeriaBarbosa Start SERVICE_AUTO_START
+# o reinstalando:
+.\scripts\install-service.ps1 -InicioAutomatico
+```
+
+### Abrir el turno de esta instancia (como Administrador)
+```powershell
+Start-Service postgresql-x64-18   # 1º: la BD, siempre antes que el POS
+Start-Service PizzeriaBarbosa     # 2º: el POS
+Get-Service postgresql-x64-18, PizzeriaBarbosa   # confirmar "Running"
+```
+
+### Cerrar el turno de esta instancia (como Administrador)
+```powershell
+Stop-Service PizzeriaBarbosa      # libera el puerto 3000 para la otra instancia
+Stop-Service postgresql-x64-18   # SOLO si esta instancia tiene su propio Postgres;
+                                  # si ambas instancias comparten el mismo Postgres,
+                                  # NO detenerlo aquí — confirmar con quien administra
+                                  # la otra instancia antes de tocar la BD.
+```
+
+### Verificar estado y tipo de arranque en cualquier momento
+```powershell
+Get-Service PizzeriaBarbosa | Select-Object Status
+sc.exe qc PizzeriaBarbosa | findstr START_TYPE
+```
+
+Notas:
+- `nssm start/stop PizzeriaBarbosa` funciona igual que `Start-Service`/`Stop-Service`
+  — al registrarse con NSSM queda como un servicio de Windows normal.
+- Los logs (`logs\servicio.log` / `logs\servicio-error.log`) se conservan entre
+  arranques; útil para confirmar que el servicio cerró limpio la noche anterior.

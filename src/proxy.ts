@@ -1,8 +1,26 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { COOKIE_SESION, hashearTokenSesion } from "@/lib/sesiones";
 
 const COOKIE_SUCURSAL = "sucursal_activa";
+
+/** CSP con nonce por request; Next.js le agrega el nonce a sus propios
+ * scripts inline de hidratación al detectarlo en este header. No incluye
+ * `upgrade-insecure-requests`: el POS corre en LAN por HTTP a propósito. */
+function construirCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'", // Radix/shadcn posicionan popovers con estilos inline
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
 
 /**
  * Protege todo excepto /login validando la cookie de sesión contra la BD
@@ -12,6 +30,17 @@ const COOKIE_SUCURSAL = "sucursal_activa";
  * lib/permisos.ts, y la expiración deslizante se renueva en getPerfilAutenticado.
  */
 export default async function proxy(request: NextRequest) {
+  const nonce = randomBytes(16).toString("base64");
+  const csp = construirCsp(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const responder = (respuesta: NextResponse) => {
+    respuesta.headers.set("Content-Security-Policy", csp);
+    return respuesta;
+  };
+
   const token = request.cookies.get(COOKIE_SESION)?.value;
 
   let autenticado = false;
@@ -39,14 +68,14 @@ export default async function proxy(request: NextRequest) {
     const destino = request.nextUrl.clone();
     destino.pathname = "/login";
     destino.search = "";
-    return NextResponse.redirect(destino);
+    return responder(NextResponse.redirect(destino));
   }
 
   if (autenticado && esLogin) {
     const destino = request.nextUrl.clone();
     destino.pathname = "/seleccionar-sucursal";
     destino.search = "";
-    return NextResponse.redirect(destino);
+    return responder(NextResponse.redirect(destino));
   }
 
   const tieneSucursal = Boolean(request.cookies.get(COOKIE_SUCURSAL)?.value);
@@ -54,10 +83,10 @@ export default async function proxy(request: NextRequest) {
     const destino = request.nextUrl.clone();
     destino.pathname = "/seleccionar-sucursal";
     destino.search = "";
-    return NextResponse.redirect(destino);
+    return responder(NextResponse.redirect(destino));
   }
 
-  return NextResponse.next({ request });
+  return responder(NextResponse.next({ request: { headers: requestHeaders } }));
 }
 
 export const config = {

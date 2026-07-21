@@ -6,7 +6,11 @@
 param(
   [string]$NombreServicio = "PizzeriaBarbosa",
   [int]$Puerto = 3000,
-  [string]$RutaNssm = "nssm"
+  [string]$RutaNssm = "nssm",
+  # Por defecto el servicio queda en arranque MANUAL (para instancias que
+  # comparten puerto con otra y no deben pelearlo tras un reinicio). Pasar
+  # -InicioAutomatico una vez que esta instancia quede en producción final.
+  [switch]$InicioAutomatico
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,15 +56,27 @@ Write-Host "Registrando el servicio '$NombreServicio' (puerto $Puerto)..."
 & $nssm set $NombreServicio AppStderr (Join-Path $logs "servicio-error.log")
 & $nssm set $NombreServicio AppRotateFiles 1
 & $nssm set $NombreServicio AppRotateBytes 10485760
-& $nssm set $NombreServicio Start SERVICE_AUTO_START
-& $nssm set $NombreServicio Description "POS Pizzeria Barbosa (Next.js): inicia con Windows"
+$tipoInicio = if ($InicioAutomatico) { "SERVICE_AUTO_START" } else { "SERVICE_DEMAND_START" }
+& $nssm set $NombreServicio Start $tipoInicio
+$descripcion = if ($InicioAutomatico) {
+  "POS Pizzeria Barbosa (Next.js): inicia con Windows"
+} else {
+  "POS Pizzeria Barbosa (Next.js): arranque manual (puerto compartido con otra instancia)"
+}
+& $nssm set $NombreServicio Description $descripcion
 & $nssm start $NombreServicio
 
 $ip = (Get-NetIPAddress -AddressFamily IPv4 |
   Where-Object { $_.IPAddress -notlike "169.254*" -and $_.IPAddress -ne "127.0.0.1" } |
   Select-Object -First 1).IPAddress
 Write-Host ""
-Write-Host "Listo. El POS quedó como servicio de Windows con inicio automático."
+if ($InicioAutomatico) {
+  Write-Host "Listo. El POS quedó como servicio de Windows con inicio automático."
+} else {
+  Write-Host "Listo. El POS quedó como servicio de Windows en arranque MANUAL."
+  Write-Host "  Tras un reinicio de la PC no arranca solo: usa Start-Service $NombreServicio."
+  Write-Host "  Para pasarlo a automático en el go-live final: nssm set $NombreServicio Start SERVICE_AUTO_START"
+}
 Write-Host "  Local:   http://localhost:$Puerto"
 if ($ip) { Write-Host "  En LAN:  http://${ip}:$Puerto" }
 Write-Host "  Logs:    $logs"

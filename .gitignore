@@ -15,6 +15,9 @@
 /test-results/
 /playwright-report/
 
+# logs del servicio de Windows (NSSM)
+/logs/
+
 # next.js
 /.next/
 /out/

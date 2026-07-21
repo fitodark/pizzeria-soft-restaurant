@@ -12,9 +12,14 @@ const ORIGEN: Record<string, string> = {
   SUELDO: "Sueldos",
 };
 
-/** Celda CSV escapada (comillas dobladas, campo entre comillas). */
+/**
+ * Celda CSV escapada (comillas dobladas, campo entre comillas). Antepone un
+ * apóstrofe si el valor arranca con =, +, -, @, tab o CR: evita que Excel/
+ * LibreOffice lo interprete como fórmula (CWE-1236).
+ */
 function celda(valor: string): string {
-  return `"${valor.replaceAll('"', '""')}"`;
+  const seguro = /^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor;
+  return `"${seguro.replaceAll('"', '""')}"`;
 }
 
 /** Export CSV de los movimientos del periodo (blueprint Step 13). */

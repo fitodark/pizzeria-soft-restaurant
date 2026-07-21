@@ -451,10 +451,13 @@ model VentaDetalleMitad {
 // Configuración, solo ADMINISTRADOR. Alta/baja directa: es catálogo de
 // fechas, no dato operativo auditable.
 model DiaFestivo {
-  id          String   @id @default(uuid()) @db.Uuid
-  fecha       DateTime @unique @db.Date
-  descripcion String // "25 de diciembre — Navidad"
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  fecha             DateTime  @unique @db.Date
+  descripcion       String // "25 de diciembre — Navidad"
+  activo            Boolean   @default(true)
+  usuarioInactivoId String?   @map("usuario_inactivo_id") @db.Uuid
+  fechaInactivacion DateTime? @map("fecha_inactivacion")
+  createdAt         DateTime  @default(now()) @map("created_at")
 
   @@map("dias_festivos")
 }

@@ -10,9 +10,9 @@ import { fechaLocalTexto } from "@/lib/precios";
 export async function esDiaFestivo(fecha: Date): Promise<boolean> {
   const festivo = await db.diaFestivo.findUnique({
     where: { fecha: new Date(`${fechaLocalTexto(fecha)}T00:00:00.000Z`) },
-    select: { id: true },
+    select: { id: true, activo: true },
   });
-  return festivo !== null;
+  return festivo !== null && festivo.activo;
 }
 
 export type DiaFestivoDTO = {
@@ -24,7 +24,10 @@ export type DiaFestivoDTO = {
 
 /** Catálogo completo de festivos, próximos primero (para el CRUD). */
 export async function listaDiasFestivos(): Promise<DiaFestivoDTO[]> {
-  const festivos = await db.diaFestivo.findMany({ orderBy: { fecha: "asc" } });
+  const festivos = await db.diaFestivo.findMany({
+    where: { activo: true },
+    orderBy: { fecha: "asc" },
+  });
   return festivos.map((f) => ({
     id: f.id,
     fecha: f.fecha.toISOString().slice(0, 10),

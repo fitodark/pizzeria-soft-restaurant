@@ -20,19 +20,33 @@ export async function crearDiaFestivo(datos: unknown): Promise<Resultado> {
   const fecha = new Date(`${parseo.data.fecha}T00:00:00.000Z`);
 
   const existente = await db.diaFestivo.findUnique({ where: { fecha } });
-  if (existente) {
+  if (existente?.activo) {
     return { ok: false, error: "Esa fecha ya está registrada como día festivo." };
   }
 
-  await db.diaFestivo.create({
-    data: { fecha, descripcion: parseo.data.descripcion },
-  });
+  if (existente) {
+    // Fecha reactivada tras una inactivación previa: reusar el registro
+    // (fecha es única) en vez de duplicar, y limpiar el rastro de auditoría.
+    await db.diaFestivo.update({
+      where: { id: existente.id },
+      data: {
+        descripcion: parseo.data.descripcion,
+        activo: true,
+        usuarioInactivoId: null,
+        fechaInactivacion: null,
+      },
+    });
+  } else {
+    await db.diaFestivo.create({
+      data: { fecha, descripcion: parseo.data.descripcion },
+    });
+  }
 
   revalidatePath("/configuracion");
   return { ok: true };
 }
 
-/** Elimina un día festivo del catálogo (las promociones vuelven a aplicar). */
+/** Inactiva un día festivo del catálogo (las promociones vuelven a aplicar). */
 export async function eliminarDiaFestivo(datos: {
   id: string;
 }): Promise<Resultado> {
@@ -40,11 +54,18 @@ export async function eliminarDiaFestivo(datos: {
   verificarPermiso(sesion.rol, "festivos.gestionar");
 
   const festivo = await db.diaFestivo.findUnique({ where: { id: datos.id } });
-  if (!festivo) {
+  if (!festivo || !festivo.activo) {
     return { ok: false, error: "El día festivo no existe." };
   }
 
-  await db.diaFestivo.delete({ where: { id: datos.id } });
+  await db.diaFestivo.update({
+    where: { id: datos.id },
+    data: {
+      activo: false,
+      usuarioInactivoId: sesion.usuario.id,
+      fechaInactivacion: new Date(),
+    },
+  });
 
   revalidatePath("/configuracion");
   return { ok: true };

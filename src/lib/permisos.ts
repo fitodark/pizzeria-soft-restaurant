@@ -1,4 +1,5 @@
 import { Rol } from "@/generated/prisma/enums";
+import { registrarEventoSeguridad } from "@/lib/log-seguridad";
 
 /**
  * Matriz rol → acción (blueprint §8). TODA server action debe validar aquí;
@@ -101,6 +102,7 @@ export function tienePermiso(rol: Rol, accion: Accion): boolean {
 /** Lanza un error en español si el rol no tiene la acción. Usar en TODA mutación. */
 export function verificarPermiso(rol: Rol, accion: Accion): void {
   if (!tienePermiso(rol, accion)) {
+    registrarEventoSeguridad("permiso_denegado", { rol, accion });
     throw new Error("No tienes permiso para realizar esta acción.");
   }
 }

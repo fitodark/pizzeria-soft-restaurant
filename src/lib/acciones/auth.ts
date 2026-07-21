@@ -16,6 +16,7 @@ import {
   generarTokenSesion,
   hashearTokenSesion,
 } from "@/lib/sesiones";
+import { registrarEventoSeguridad } from "@/lib/log-seguridad";
 import { Rol } from "@/generated/prisma/enums";
 
 export type EstadoLogin = { error: string } | null;
@@ -48,6 +49,10 @@ export async function iniciarSesion(
   // Mensaje único para correo inexistente, sin credenciales locales o
   // contraseña errónea: no revelar cuál de los tres falló.
   if (!perfil || !perfil.passwordHash) {
+    registrarEventoSeguridad("login_fallido", {
+      email: datos.data.email.toLowerCase(),
+      motivo: "correo_desconocido",
+    });
     return { error: "Correo o contraseña incorrectos." };
   }
 
@@ -56,6 +61,11 @@ export async function iniciarSesion(
     const minutos = Math.ceil(
       (perfil.bloqueadoHasta.getTime() - ahora.getTime()) / 60000
     );
+    registrarEventoSeguridad("login_fallido", {
+      email: perfil.email,
+      motivo: "cuenta_bloqueada",
+      bloqueadoHasta: perfil.bloqueadoHasta.toISOString(),
+    });
     return {
       error: `Demasiados intentos fallidos. Espera ${minutos} min e inténtalo de nuevo.`,
     };
@@ -67,22 +77,32 @@ export async function iniciarSesion(
   );
   if (!passwordCorrecta) {
     const intentos = perfil.intentosFallidos + 1;
+    const bloqueado = intentos >= MAX_INTENTOS;
     await db.perfil.update({
       where: { id: perfil.id },
-      data:
-        intentos >= MAX_INTENTOS
-          ? {
-              intentosFallidos: 0,
-              bloqueadoHasta: new Date(
-                ahora.getTime() + MINUTOS_BLOQUEO * 60000
-              ),
-            }
-          : { intentosFallidos: intentos },
+      data: bloqueado
+        ? {
+            intentosFallidos: 0,
+            bloqueadoHasta: new Date(
+              ahora.getTime() + MINUTOS_BLOQUEO * 60000
+            ),
+          }
+        : { intentosFallidos: intentos },
+    });
+    registrarEventoSeguridad("login_fallido", {
+      email: perfil.email,
+      motivo: "password_incorrecta",
+      intentos,
+      bloqueado,
     });
     return { error: "Correo o contraseña incorrectos." };
   }
 
   if (!perfil.activo) {
+    registrarEventoSeguridad("login_fallido", {
+      email: perfil.email,
+      motivo: "usuario_inactivo",
+    });
     return { error: "Tu usuario está inactivo. Contacta al administrador." };
   }
 

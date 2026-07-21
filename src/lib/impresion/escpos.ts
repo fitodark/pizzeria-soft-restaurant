@@ -1,12 +1,8 @@
 import net from "node:net";
-import { exec } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { CharacterSet, PrinterTypes, ThermalPrinter } from "node-thermal-printer";
-
-const ejecutar = promisify(exec);
 
 const PUERTO_ESCPOS = 9100;
 const TIMEOUT_MS = 5000;
@@ -53,17 +49,14 @@ function enviarTcp(ruta: string, buffer: Buffer): Promise<void> {
 
 /**
  * Fallback Windows: la impresora está compartida (\\EQUIPO\Nombre); se copia
- * el buffer en binario con `copy /B`.
+ * el buffer en binario directo al UNC path (sin invocar una shell).
  */
 async function enviarShare(ruta: string, buffer: Buffer): Promise<void> {
   const carpeta = await mkdtemp(path.join(tmpdir(), "ticket-"));
   const archivo = path.join(carpeta, "ticket.bin");
   try {
     await writeFile(archivo, buffer);
-    await ejecutar(`copy /B "${archivo}" "${ruta}"`, {
-      shell: "cmd.exe",
-      timeout: TIMEOUT_MS * 2,
-    });
+    await copyFile(archivo, ruta);
   } catch {
     throw new Error(`No se pudo imprimir en el recurso compartido ${ruta}.`);
   } finally {

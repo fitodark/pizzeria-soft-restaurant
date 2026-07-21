@@ -5,7 +5,7 @@ export const esquemaModo = z.enum(MODOS_IMPRESORA);
 export type ModoImpresora = z.infer<typeof esquemaModo>;
 
 const RUTA_TCP = /^[\w.-]+(:\d{1,5})?$/; // "192.168.1.50" o "host:9100"
-const RUTA_SHARE = /^\\\\[^\\]+\\.+$/; // "\\EQUIPO\Tickets"
+const RUTA_SHARE = /^\\\\[^\\<>|&^"'`]+\\[^\\<>|&^"'`]+$/; // "\\EQUIPO\Tickets"
 
 /** Mensaje de error si la ruta no corresponde al modo; null si es válida. */
 export function validarRuta(modo: ModoImpresora, ruta: string): string | null {

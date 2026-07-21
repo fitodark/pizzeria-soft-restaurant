@@ -28,6 +28,14 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
 *.tmp.ts
 .claude/settings.local.json
 
